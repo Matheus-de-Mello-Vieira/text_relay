@@ -5,13 +5,24 @@ description = "A simple text relay application."
 authors = [{ name = "Matheus" }]
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "python-multipart>=0.0.20,<1.0",
+    "uvicorn>=0.34,<1.0",
+]
 
 [project.scripts]
 text-relay = "text_relay.main:main"
 
 [tool.poetry]
 packages = [{ include = "text_relay" }]
+include = ["text_relay/static/index.html"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28,<1.0",
+    "pytest>=8.3,<9.0",
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
