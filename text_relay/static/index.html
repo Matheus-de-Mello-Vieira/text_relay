@@ -5,31 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TextRelay</title>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; } main { max-width: 760px; margin: auto; padding: 1.25rem; }
-    form, .result { border: 1px solid #8887; border-radius: .65rem; padding: 1rem; margin-block: 1rem; }
-    label, button { display: block; margin-block: .65rem; } input, button { font: inherit; }
-    button { padding: .55rem .85rem; cursor: pointer; } button:disabled { cursor: wait; opacity: .65; }
-    #status { min-height: 1.5rem; } .error { color: #b42318; } .success { color: #16803c; }
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f8fc;
+      color: #172033;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: radial-gradient(circle at 0 0, #e9edff 0, transparent 31rem), #f7f8fc; }
+    main { width: min(100% - 2rem, 780px); margin: 0 auto; padding: 3.5rem 0 4rem; }
+    .brand { display: flex; align-items: center; gap: .7rem; color: #4655bc; font-size: .94rem; font-weight: 750; letter-spacing: .02em; }
+    .brand-mark { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .68rem; background: #4655bc; box-shadow: 0 .4rem 1rem #4655bc44; color: white; }
+    .brand-mark svg { width: 1.15rem; height: 1.15rem; }
+    h1, h2, p { margin-top: 0; }
+    h1 { max-width: 12ch; margin: 2rem 0 .7rem; font-size: clamp(2.15rem, 6vw, 3.3rem); line-height: 1.06; letter-spacing: -.055em; }
+    .intro { max-width: 52ch; margin-bottom: 2rem; color: #63708a; font-size: 1.04rem; line-height: 1.65; }
+    .upload-panel, .result { border: 1px solid #e2e6f0; border-radius: 1.15rem; background: #fff; box-shadow: 0 .7rem 2.5rem #2d3b6b0a; }
+    .upload-panel { padding: clamp(1.15rem, 4vw, 2rem); }
+    .panel-heading { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; }
+    .panel-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: .75rem; background: #eef0ff; color: #4655bc; }
+    .panel-icon svg { width: 1.25rem; height: 1.25rem; }
+    h2 { margin-bottom: .2rem; font-size: 1rem; letter-spacing: -.015em; }
+    .panel-heading p { margin: 0; color: #758097; font-size: .87rem; }
+    input { font: inherit; }
+    .file-picker { display: grid; min-height: 8.5rem; place-items: center; border: 1.5px dashed #bdc5df; border-radius: .85rem; background: #fbfcff; cursor: pointer; text-align: center; transition: border-color .18s, background .18s; }
+    .file-picker:hover, .file-picker:focus-within { border-color: #6574d2; background: #f5f6ff; }
+    .file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .file-picker-content { display: grid; gap: .3rem; padding: 1rem; }
+    .file-picker strong { color: #33415f; font-size: .95rem; }
+    .file-picker span { color: #79849a; font-size: .82rem; }
+    .file-name { display: none; margin-top: .8rem; color: #52607a; font-size: .84rem; overflow-wrap: anywhere; }
+    .file-name.visible { display: block; }
+    button { border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+    #submit { display: inline-flex; width: 100%; min-height: 3rem; align-items: center; justify-content: center; margin-top: 1rem; border-radius: .75rem; background: #4655bc; box-shadow: 0 .45rem 1rem #4655bc33; color: white; transition: transform .16s, background .16s, box-shadow .16s; }
+    #submit:hover:not(:disabled) { background: #3948a8; box-shadow: 0 .6rem 1.2rem #4655bc40; transform: translateY(-1px); }
+    #submit:focus-visible, .copy-button:focus-visible, .file-picker:focus-within { outline: 3px solid #9ca7f5; outline-offset: 3px; }
+    button:disabled { cursor: wait; opacity: .72; }
+    #status { min-height: 1.5rem; margin: .85rem .1rem 0; color: #63708a; font-size: .9rem; }
+    #status:not(:empty)::before { content: ""; display: inline-block; width: .48rem; height: .48rem; margin-right: .45rem; border-radius: 50%; background: currentColor; vertical-align: .08em; }
+    #status.error { color: #bd3b42; } #status.success { color: #21734d; }
+    #submitted { margin-top: 2.4rem; }
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2.5rem 0 1rem; }
+    .section-heading h2 { font-size: 1.1rem; }
+    .section-heading span { color: #8a94a9; font-size: .8rem; }
+    #submitted > h2 { margin-bottom: 1rem; font-size: 1.1rem; }
+    .result { padding: 1.1rem 1.2rem; margin-bottom: .85rem; }
     .result-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; margin-bottom: 0; }
-    @media (max-width: 480px) { main { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; } }
+    time { color: #7b869c; font-size: .8rem; }
+    .copy-button { padding: .38rem .65rem; border: 1px solid #dce1ec; border-radius: .5rem; background: #fff; color: #43516d; font-size: .78rem; transition: background .16s, border-color .16s; }
+    .copy-button:hover { border-color: #9fa9c6; background: #f5f6fa; }
+    pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+    .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
+    @media (max-width: 480px) { main { width: min(100% - 1.4rem, 780px); padding-top: 1.5rem; } h1 { margin-top: 1.5rem; } .upload-panel { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; gap: .55rem; } }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
   </style>
 </head>
 <body>
   <main>
-    <h1>TextRelay</h1>
-    <p>Take or select a photo, then extract its printed text.</p>
-    <form id="upload-form">
-      <label for="image">Image</label>
-      <input id="image" name="file" type="file" accept="image/*" capture="environment" required>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6M10 17h5"/></svg></span>TEXTRELAY</div>
+    <h1>Turn a photo into text.</h1>
+    <p class="intro">Take a picture of printed text or choose an existing image. Your transcription appears here in moments, ready to copy.</p>
+    <form id="upload-form" class="upload-panel">
+      <div class="panel-heading"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 16 3-3 2.5 2.5L15 12l3 4M8 5l1.2-2h5.6L16 5"/></svg></span><div><h2>Choose an image</h2><p>JPG, PNG, or WebP up to 10 MB</p></div></div>
+      <label class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/*" capture="environment" required><span class="file-picker-content"><strong>Take a photo or browse files</strong><span>Your image stays on this trusted network</span></span></label>
+      <p id="file-name" class="file-name" aria-live="polite"></p>
       <button id="submit" type="submit">Extract text</button>
     </form>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="submitted" hidden><h2>Latest submission</h2></section>
     <section aria-labelledby="results-heading">
-      <h2 id="results-heading">Recent results</h2>
-      <div id="results"></div>
+      <div class="section-heading"><h2 id="results-heading">Recent results</h2><span>Synced across this network</span></div>
+      <div id="results"><div class="empty-state">Your extracted text will appear here.</div></div>
     </section>
   </main>
   <script>
@@ -39,6 +85,7 @@
     const status = document.querySelector("#status");
     const results = document.querySelector("#results");
     const submitted = document.querySelector("#submitted");
+    const fileName = document.querySelector("#file-name");
     let lastResults = "";
     let newestResultId = null;
 
@@ -66,6 +113,7 @@
       timestamp.textContent = displayTime(result.created_at);
       const copy = document.createElement("button");
       copy.type = "button";
+      copy.className = "copy-button";
       copy.textContent = "Copy";
       copy.addEventListener("click", () => copyText(result.text, copy));
       header.append(timestamp, copy);
@@ -78,8 +126,13 @@
       const serialized = JSON.stringify(items);
       if (serialized === lastResults) return;
       lastResults = serialized;
-      results.replaceChildren(...items.map(resultCard));
+      results.replaceChildren(...(items.length ? items.map(resultCard) : [Object.assign(document.createElement("div"), { className: "empty-state", textContent: "Your extracted text will appear here." })]));
     }
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files[0];
+      fileName.textContent = file ? `Selected: ${file.name}` : "";
+      fileName.classList.toggle("visible", Boolean(file));
+    });
     function wait(milliseconds) {
       return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
