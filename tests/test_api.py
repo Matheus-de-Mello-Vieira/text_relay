@@ -1,7 +1,12 @@
+import signal
+from threading import Thread
+
 from fastapi.testclient import TestClient
+import uvicorn
 
 from text_relay.config import Settings
-from text_relay.main import create_app
+from text_relay import main
+from text_relay.main import LongPollShutdownServer, create_app
 from text_relay.ocr import OCRExecutionError
 
 
@@ -97,3 +102,51 @@ def test_oversized_upload_is_rejected() -> None:
 def test_ocr_failures_are_controlled() -> None:
     response = image_request(make_client(FakeOCRStrategy(error=OCRExecutionError("details not for clients"))))
     assert (response.status_code, response.json()["detail"]) == (422, "OCR failed to process the image.")
+
+
+def test_shutdown_signal_releases_all_long_polls_immediately() -> None:
+    app = create_app(Settings())
+    server = LongPollShutdownServer(
+        uvicorn.Config(app),
+        app.state.store.interrupt_waiters,
+    )
+    received: list[list] = []
+    thread = Thread(
+        target=lambda: received.append(
+            app.state.store.wait_for_change(None, timeout_seconds=10)
+        )
+    )
+
+    thread.start()
+    server.handle_exit(signal.SIGTERM, None)
+    thread.join(timeout=0.1)
+
+    assert not thread.is_alive()
+    assert received == [[]]
+    assert server.should_exit
+
+
+def test_main_creates_a_server_with_the_configured_address(monkeypatch) -> None:
+    settings = Settings(host="127.0.0.1", port=9876)
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(main.Settings, "from_environment", lambda: settings)
+    monkeypatch.setattr(main.uvicorn, "Config", lambda app, **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(main, "LongPollShutdownServer", lambda config, interrupt: type("Server", (), {"run": lambda self: None})())
+
+    main.main()
+
+    assert captured == {
+        "host": "127.0.0.1",
+        "port": 9876,
+    }
+
+
+def test_main_suppresses_uvicorns_replayed_keyboard_interrupt(monkeypatch) -> None:
+    class InterruptingServer:
+        def run(self) -> None:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(main.uvicorn, "Config", lambda app, **kwargs: None)
+    monkeypatch.setattr(main, "LongPollShutdownServer", lambda config, interrupt: InterruptingServer())
+
+    main.main()

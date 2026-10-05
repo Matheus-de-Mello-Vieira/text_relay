@@ -6,6 +6,8 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
+from types import FrameType
+from typing import Callable
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -17,6 +19,18 @@ from text_relay.store import OCRResult, ResultStore
 
 LOGGER = logging.getLogger(__name__)
 ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+
+class LongPollShutdownServer(uvicorn.Server):
+    """Notify long polls as soon as Uvicorn receives a shutdown signal."""
+
+    def __init__(self, config: uvicorn.Config, interrupt_waiters: Callable[[], None]) -> None:
+        super().__init__(config)
+        self._interrupt_waiters = interrupt_waiters
+
+    def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        self._interrupt_waiters()
+        super().handle_exit(sig, frame)
 
 
 def _result_payload(result: OCRResult) -> dict[str, str]:
@@ -32,10 +46,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
-        close = getattr(selected_strategy, "aclose", None)
-        if close is not None:
-            await close()
+        try:
+            yield
+        finally:
+            app.state.store.interrupt_waiters()
+            close = getattr(selected_strategy, "aclose", None)
+            if close is not None:
+                await close()
 
     app = FastAPI(title="TextRelay", lifespan=lifespan)
     app.state.store = ResultStore(resolved_settings.max_result_history)
@@ -51,11 +68,15 @@ def create_app(
         wait: bool = Query(default=False),
     ) -> dict[str, list[dict[str, str]]]:
         if wait:
-            records = await asyncio.to_thread(
-                app.state.store.wait_for_change,
-                after,
-                resolved_settings.long_poll_timeout_seconds,
-            )
+            try:
+                records = await asyncio.to_thread(
+                    app.state.store.wait_for_change,
+                    after,
+                    resolved_settings.long_poll_timeout_seconds,
+                )
+            except asyncio.CancelledError:
+                app.state.store.interrupt_waiters()
+                raise
         else:
             records = app.state.store.recent()
         return {"results": [_result_payload(result) for result in records]}
@@ -95,9 +116,19 @@ app = create_app()
 
 
 def main() -> None:
-    """Run the local server using the documented LAN-friendly defaults."""
+    """Run the local server and release long polls when it receives an exit signal."""
     settings = Settings.from_environment()
-    uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
+    server_app = create_app(settings)
+    config = uvicorn.Config(
+        server_app,
+        host=settings.host,
+        port=settings.port,
+    )
+    try:
+        LongPollShutdownServer(config, server_app.state.store.interrupt_waiters).run()
+    except KeyboardInterrupt:
+        # Uvicorn replays Ctrl+C after restoring the previous signal handler.
+        pass
 
 
 if __name__ == "__main__":

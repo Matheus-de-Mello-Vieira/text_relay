@@ -26,6 +26,7 @@ class ResultStore:
             raise ValueError("maximum_size must be positive")
         self._results: deque[OCRResult] = deque(maxlen=maximum_size)
         self._changed = Condition()
+        self._waiters_interrupted = False
 
     def add(self, text: str) -> OCRResult:
         """Create and retain one result, returning the new record."""
@@ -50,8 +51,17 @@ class ResultStore:
         """Return results after a newer record arrives or the timeout expires."""
         with self._changed:
             self._changed.wait_for(
-                lambda: bool(self._results)
-                and self._results[0].id != latest_result_id,
+                lambda: self._waiters_interrupted
+                or (
+                    bool(self._results)
+                    and self._results[0].id != latest_result_id
+                ),
                 timeout=timeout_seconds,
             )
             return list(self._results)
+
+    def interrupt_waiters(self) -> None:
+        """Wake long-poll threads so shutdown does not wait for their timeout."""
+        with self._changed:
+            self._waiters_interrupted = True
+            self._changed.notify_all()

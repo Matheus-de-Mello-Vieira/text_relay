@@ -48,3 +48,21 @@ def test_wait_for_change_returns_after_timeout_when_history_is_unchanged() -> No
 
     assert monotonic() - started >= 0.01
     assert results == [existing]
+
+
+def test_interrupt_waiters_releases_long_poll_immediately() -> None:
+    store = ResultStore(maximum_size=2)
+    received: list[list] = []
+    thread = Thread(
+        target=lambda: received.append(store.wait_for_change(None, timeout_seconds=10))
+    )
+
+    thread.start()
+    thread.join(timeout=0.05)
+    assert thread.is_alive()
+
+    store.interrupt_waiters()
+    thread.join(timeout=0.1)
+
+    assert not thread.is_alive()
+    assert received == [[]]
