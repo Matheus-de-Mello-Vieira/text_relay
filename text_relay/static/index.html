@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TextRelay</title>
+  <link rel="icon" type="image/png" href="/textrelay-icon.png">
   <style>
     :root {
       color-scheme: light;
@@ -15,8 +16,7 @@
     body { margin: 0; min-width: 320px; background: radial-gradient(circle at 0 0, #e9edff 0, transparent 31rem), #f7f8fc; }
     main { width: min(100% - 2rem, 780px); margin: 0 auto; padding: 3.5rem 0 4rem; }
     .brand { display: flex; align-items: center; gap: .7rem; color: #4655bc; font-size: .94rem; font-weight: 750; letter-spacing: .02em; }
-    .brand-mark { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .68rem; background: #4655bc; box-shadow: 0 .4rem 1rem #4655bc44; color: white; }
-    .brand-mark svg { width: 1.15rem; height: 1.15rem; }
+    .brand-mark { display: block; width: 2rem; height: 2rem; border-radius: .68rem; box-shadow: 0 .4rem 1rem #4655bc44; }
     h1, h2, p { margin-top: 0; }
     h1 { max-width: 12ch; margin: 2rem 0 .7rem; font-size: clamp(2.15rem, 6vw, 3.3rem); line-height: 1.06; letter-spacing: -.055em; }
     .intro { max-width: 52ch; margin-bottom: 2rem; color: #63708a; font-size: 1.04rem; line-height: 1.65; }
@@ -62,7 +62,7 @@
 </head>
 <body>
   <main>
-    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6M10 17h5"/></svg></span>TEXTRELAY</div>
+    <div class="brand"><img class="brand-mark" src="/textrelay-icon.png" alt="" width="32" height="32">TEXTRELAY</div>
     <h1>Turn a photo into text.</h1>
     <p class="intro">Take a picture of printed text or choose an existing image. Your transcription appears here in moments, ready to copy.</p>
     <form id="upload-form" class="upload-panel">

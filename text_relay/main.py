@@ -62,6 +62,10 @@ def create_app(
     async def index() -> FileResponse:
         return FileResponse(Path(__file__).parent / "static" / "index.html")
 
+    @app.get("/textrelay-icon.png", response_class=FileResponse)
+    async def app_icon() -> FileResponse:
+        return FileResponse(Path(__file__).parent / "static" / "textrelay-icon.png")
+
     @app.get("/api/results")
     async def recent_results(
         after: str | None = Query(default=None),

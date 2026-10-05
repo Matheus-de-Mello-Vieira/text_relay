@@ -35,11 +35,21 @@ def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
     response = make_client(FakeOCRStrategy()).get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert '<link rel="icon" type="image/png" href="/textrelay-icon.png">' in response.text
+    assert '<img class="brand-mark" src="/textrelay-icon.png"' in response.text
     assert 'accept="image/*"' in response.text
     assert 'capture="environment"' in response.text
     assert 'url.searchParams.set("wait", "true")' in response.text
     assert "window.setInterval" not in response.text
     assert "navigator.clipboard.writeText" in response.text
+
+
+def test_app_icon_is_served_as_a_png() -> None:
+    response = make_client(FakeOCRStrategy()).get("/textrelay-icon.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_missing_upload_is_rejected() -> None:
