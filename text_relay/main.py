@@ -3,33 +3,43 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
-import tempfile
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 import uvicorn
 
 from text_relay.config import Settings
-from text_relay.ocr import OCRFailure, TesseractUnavailable, extract_text
+from text_relay.ocr import OCRError, OCRStrategy, create_ocr_strategy
 from text_relay.store import OCRResult, ResultStore
 
 LOGGER = logging.getLogger(__name__)
 ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
-OCRExtractor = Callable[..., str]
 
 
 def _result_payload(result: OCRResult) -> dict[str, str]:
     return {"id": result.id, "created_at": result.created_at.isoformat().replace("+00:00", "Z"), "text": result.text}
 
 
-def create_app(settings: Settings | None = None, *, ocr_extractor: OCRExtractor = extract_text) -> FastAPI:
-    """Create a configured application, optionally with a test OCR boundary."""
+def create_app(
+    settings: Settings | None = None, *, ocr_strategy: OCRStrategy | None = None
+) -> FastAPI:
+    """Create an application using one selected or injected OCR strategy."""
     resolved_settings = settings or Settings.from_environment()
-    app = FastAPI(title="TextRelay")
+    selected_strategy = ocr_strategy or create_ocr_strategy(resolved_settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        close = getattr(selected_strategy, "aclose", None)
+        if close is not None:
+            await close()
+
+    app = FastAPI(title="TextRelay", lifespan=lifespan)
     app.state.store = ResultStore(resolved_settings.max_result_history)
+    app.state.ocr_strategy = selected_strategy
 
     @app.get("/", response_class=FileResponse)
     async def index() -> FileResponse:
@@ -54,36 +64,29 @@ def create_app(settings: Settings | None = None, *, ocr_extractor: OCRExtractor 
     async def perform_ocr(file: UploadFile | None = File(default=None)) -> dict[str, str]:
         if file is None:
             raise HTTPException(status_code=400, detail="An image file is required.")
-        suffix = ACCEPTED_CONTENT_TYPES.get(file.content_type or "")
-        if suffix is None:
+        content_type = file.content_type
+        if content_type not in ACCEPTED_CONTENT_TYPES:
             raise HTTPException(status_code=415, detail="Unsupported image type.")
 
-        temporary_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temporary_file:
-                temporary_path = Path(temporary_file.name)
-                total_size = 0
-                while chunk := await file.read(1024 * 1024):
-                    total_size += len(chunk)
-                    if total_size > resolved_settings.max_upload_size:
-                        raise HTTPException(status_code=413, detail="Image is too large.")
-                    temporary_file.write(chunk)
+            chunks: list[bytes] = []
+            total_size = 0
+            while chunk := await file.read(1024 * 1024):
+                total_size += len(chunk)
+                if total_size > resolved_settings.max_upload_size:
+                    raise HTTPException(status_code=413, detail="Image is too large.")
+                chunks.append(chunk)
 
             if total_size == 0:
                 raise HTTPException(status_code=400, detail="Image upload is empty.")
             try:
-                text = await asyncio.to_thread(ocr_extractor, temporary_path, language=resolved_settings.ocr_language, psm=resolved_settings.ocr_psm)
-            except TesseractUnavailable as error:
-                LOGGER.error("Tesseract is unavailable: %s", error)
-                raise HTTPException(status_code=503, detail="Tesseract is not installed or unavailable.") from error
-            except OCRFailure as error:
+                text = await selected_strategy.extract_text(b"".join(chunks), content_type)
+            except OCRError as error:
                 LOGGER.warning("OCR failed: %s", error)
                 raise HTTPException(status_code=422, detail="OCR failed to process the image.") from error
             return _result_payload(app.state.store.add(text))
         finally:
             await file.close()
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
 
     return app
 

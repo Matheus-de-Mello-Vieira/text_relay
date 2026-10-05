@@ -10,6 +10,8 @@ from pathlib import Path
 DEFAULT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 DEFAULT_MAX_RESULT_HISTORY = 20
 DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25.0
+OCR_PROVIDERS = {"tesseract", "openai"}
+OPENAI_IMAGE_DETAILS = {"low", "high", "original", "auto"}
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,10 @@ class Settings:
     port: int = 8000
     ocr_language: str = "eng"
     ocr_psm: int = 6
+    ocr_provider: str = "tesseract"
+    openai_ocr_model: str = "gpt-6-luna"
+    openai_image_detail: str = "high"
+    openai_api_key: str | None = None
     max_upload_size: int = DEFAULT_MAX_UPLOAD_SIZE
     max_result_history: int = DEFAULT_MAX_RESULT_HISTORY
     long_poll_timeout_seconds: float = DEFAULT_LONG_POLL_TIMEOUT_SECONDS
@@ -33,6 +39,15 @@ class Settings:
             port=_positive_int("PORT", dotenv_values, cls.port),
             ocr_language=_setting("OCR_LANGUAGE", dotenv_values, cls.ocr_language),
             ocr_psm=_positive_int("OCR_PSM", dotenv_values, cls.ocr_psm),
+            ocr_provider=_choice("OCR_PROVIDER", dotenv_values, cls.ocr_provider, OCR_PROVIDERS),
+            openai_ocr_model=_setting("OPENAI_OCR_MODEL", dotenv_values, cls.openai_ocr_model),
+            openai_image_detail=_choice(
+                "OPENAI_IMAGE_DETAIL",
+                dotenv_values,
+                cls.openai_image_detail,
+                OPENAI_IMAGE_DETAILS,
+            ),
+            openai_api_key=_optional_setting("OPENAI_API_KEY", dotenv_values),
             max_upload_size=_positive_int(
                 "MAX_UPLOAD_SIZE", dotenv_values, cls.max_upload_size
             ),
@@ -64,6 +79,21 @@ def _positive_int(name: str, dotenv_values: dict[str, str], default: int) -> int
         message = f"{name} must be a positive integer"
         raise ValueError(message)
     return parsed
+
+
+def _choice(
+    name: str, dotenv_values: dict[str, str], default: str, choices: set[str]
+) -> str:
+    value = _setting(name, dotenv_values, default).lower()
+    if value not in choices:
+        expected = ", ".join(sorted(choices))
+        raise ValueError(f"{name} must be one of: {expected}")
+    return value
+
+
+def _optional_setting(name: str, dotenv_values: dict[str, str]) -> str | None:
+    value = os.getenv(name, dotenv_values.get(name))
+    return value if value else None
 
 
 def _positive_float(

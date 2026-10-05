@@ -1,42 +1,45 @@
-"""Tesseract integration kept separate from HTTP concerns."""
+"""Application-owned OCR strategy boundary and provider selection."""
 
 from __future__ import annotations
 
-from pathlib import Path
-import subprocess
+from typing import Protocol
+
+from text_relay.config import Settings
 
 
-class OCRFailure(Exception):
-    """Raised when Tesseract cannot produce text from an image."""
+class OCRError(Exception):
+    """Raised when an OCR provider cannot complete a transcription."""
 
 
-class TesseractUnavailable(OCRFailure):
-    """Raised when the Tesseract executable cannot be started."""
+class OCRConfigurationError(OCRError):
+    """Raised when the selected OCR provider lacks required configuration."""
 
 
-def extract_text(image_path: Path, *, language: str, psm: int) -> str:
-    """Run Tesseract against *image_path* and return its extracted text."""
-    command = [
-        "tesseract",
-        str(image_path),
-        "stdout",
-        "-l",
-        language,
-        "--psm",
-        str(psm),
-    ]
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
+class OCRExecutionError(OCRError):
+    """Raised when a configured OCR provider cannot process an image."""
+
+
+class OCRStrategy(Protocol):
+    """Transcribe one already-validated image without HTTP concerns."""
+
+    async def extract_text(self, image: bytes, content_type: str) -> str:
+        """Return text transcribed from the supplied image."""
+
+
+def create_ocr_strategy(settings: Settings) -> OCRStrategy:
+    """Create exactly the OCR provider selected by *settings*."""
+    if settings.ocr_provider == "tesseract":
+        from text_relay.tesseract_ocr import TesseractOCRStrategy
+
+        return TesseractOCRStrategy(language=settings.ocr_language, psm=settings.ocr_psm)
+    if settings.ocr_provider == "openai":
+        if not settings.openai_api_key:
+            raise OCRConfigurationError("OPENAI_API_KEY is required when OCR_PROVIDER=openai")
+        from text_relay.openai_ocr import OpenAIOCRStrategy
+
+        return OpenAIOCRStrategy(
+            api_key=settings.openai_api_key,
+            model=settings.openai_ocr_model,
+            image_detail=settings.openai_image_detail,
         )
-    except FileNotFoundError as error:
-        raise TesseractUnavailable("Tesseract is not installed or is not on PATH") from error
-    except OSError as error:
-        raise OCRFailure("Could not start Tesseract") from error
-
-    if completed.returncode != 0:
-        raise OCRFailure("Tesseract failed to process the image")
-    return completed.stdout
+    raise OCRConfigurationError(f"Unsupported OCR_PROVIDER: {settings.ocr_provider}")
