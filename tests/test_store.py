@@ -48,7 +48,7 @@ def test_wait_for_change_returns_after_timeout_when_history_is_unchanged() -> No
     existing = add(store, "existing")
 
     started = monotonic()
-    results = store.wait_for_change(existing.id, timeout_seconds=0.02)
+    results = store.wait_for_change(store.change_id(), timeout_seconds=0.02)
 
     assert monotonic() - started >= 0.01
     assert results == [existing]
@@ -78,3 +78,18 @@ def test_finds_retained_result_by_image_checksum() -> None:
 
     assert store.find_by_image_checksum("checksum") == expected
     assert store.find_by_image_checksum("other") is None
+
+
+def test_jobs_publish_queued_processing_and_completed_states() -> None:
+    store = ResultStore(maximum_size=2)
+
+    job = store.enqueue("checksum")
+    assert job is not None
+    assert store.jobs() == [job]
+    assert store.mark_processing(job.id).status == "processing"  # type: ignore[union-attr]
+    completed = store.complete(job.id, "text")
+
+    assert completed is not None
+    assert completed.status == "completed"
+    assert completed.result is not None
+    assert store.recent() == [completed.result]

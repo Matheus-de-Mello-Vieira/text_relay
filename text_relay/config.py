@@ -14,6 +14,7 @@ import psutil
 DEFAULT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 DEFAULT_MAX_RESULT_HISTORY = 20
 DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25.0
+DEFAULT_OCR_WORKERS = 2
 OCR_PROVIDERS = {"tesseract", "openai"}
 OPENAI_IMAGE_DETAILS = {"low", "high", "original", "auto"}
 
@@ -33,6 +34,7 @@ class Settings:
     max_upload_size: int = DEFAULT_MAX_UPLOAD_SIZE
     max_result_history: int = DEFAULT_MAX_RESULT_HISTORY
     long_poll_timeout_seconds: float = DEFAULT_LONG_POLL_TIMEOUT_SECONDS
+    ocr_workers: int = DEFAULT_OCR_WORKERS
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -63,6 +65,7 @@ class Settings:
                 dotenv_values,
                 cls.long_poll_timeout_seconds,
             ),
+            ocr_workers=_positive_int("OCR_WORKERS", dotenv_values, cls.ocr_workers),
         )
 
 

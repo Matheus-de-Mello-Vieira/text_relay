@@ -20,7 +20,7 @@
     h1, h2, p { margin-top: 0; }
     h1 { max-width: 12ch; margin: 2rem 0 .7rem; font-size: clamp(2.15rem, 6vw, 3.3rem); line-height: 1.06; letter-spacing: -.055em; }
     .intro { max-width: 52ch; margin-bottom: 2rem; color: #63708a; font-size: 1.04rem; line-height: 1.65; }
-    .upload-panel, .result { border: 1px solid #e2e6f0; border-radius: 1.15rem; background: #fff; box-shadow: 0 .7rem 2.5rem #2d3b6b0a; }
+    .upload-panel, .result, .job { border: 1px solid #e2e6f0; border-radius: 1.15rem; background: #fff; box-shadow: 0 .7rem 2.5rem #2d3b6b0a; }
     .upload-panel { padding: clamp(1.15rem, 4vw, 2rem); }
     .panel-heading { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; }
     .panel-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: .75rem; background: #eef0ff; color: #4655bc; }
@@ -50,6 +50,9 @@
     .section-heading span { color: #8a94a9; font-size: .8rem; }
     #submitted > h2 { margin-bottom: 1rem; font-size: 1.1rem; }
     .result { padding: 1.1rem 1.2rem; margin-bottom: .85rem; }
+    .job { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .85rem 1.1rem; margin-bottom: .6rem; color: #52607a; font-size: .9rem; }
+    .job-status { padding: .2rem .55rem; border-radius: 999px; background: #eef0ff; color: #4655bc; font-size: .78rem; font-weight: 700; text-transform: capitalize; }
+    .job-status.completed { background: #e6f6ec; color: #21734d; } .job-status.failed { background: #feecee; color: #bd3b42; }
     .result-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     time { color: #7b869c; font-size: .8rem; }
     .copy-button { padding: .38rem .65rem; border: 1px solid #dce1ec; border-radius: .5rem; background: #fff; color: #43516d; font-size: .78rem; transition: background .16s, border-color .16s; }
@@ -57,7 +60,7 @@
     pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
     .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
     @media (max-width: 480px) { main { width: min(100% - 1.4rem, 780px); padding-top: 1.5rem; } h1 { margin-top: 1.5rem; } .upload-panel { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; gap: .55rem; } }
-    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
   </style>
 </head>
 <body>
@@ -73,6 +76,10 @@
     </form>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="submitted" hidden><h2>Latest submission</h2></section>
+    <section aria-labelledby="queue-heading">
+      <div class="section-heading"><h2 id="queue-heading">Extraction queue</h2><span>Shared across this network</span></div>
+      <div id="queue"><div class="empty-state">No images have been submitted yet.</div></div>
+    </section>
     <section aria-labelledby="results-heading">
       <div class="section-heading"><h2 id="results-heading">Recent results</h2><span>Synced across this network</span></div>
       <div id="results"><div class="empty-state">Your extracted text will appear here.</div></div>
@@ -84,11 +91,12 @@
     const submitButton = document.querySelector("#submit");
     const status = document.querySelector("#status");
     const results = document.querySelector("#results");
+    const queue = document.querySelector("#queue");
     const submitted = document.querySelector("#submitted");
     const fileName = document.querySelector("#file-name");
     const RESULTS_REQUEST_TIMEOUT_MS = 40_000;
     let lastResults = "";
-    let newestResultId = null;
+    let cursor = null;
 
     function setStatus(message, state = "") {
       status.textContent = message;
@@ -129,6 +137,20 @@
       lastResults = serialized;
       results.replaceChildren(...(items.length ? items.map(resultCard) : [Object.assign(document.createElement("div"), { className: "empty-state", textContent: "Your extracted text will appear here." })]));
     }
+    function jobCard(job) {
+      const card = document.createElement("article");
+      card.className = "job";
+      const details = document.createElement("span");
+      details.textContent = `Submitted ${displayTime(job.created_at)}`;
+      const label = document.createElement("span");
+      label.className = `job-status ${job.status}`;
+      label.textContent = job.status;
+      card.append(details, label);
+      return card;
+    }
+    function renderQueue(items) {
+      queue.replaceChildren(...(items.length ? items.map(jobCard) : [Object.assign(document.createElement("div"), { className: "empty-state", textContent: "No images have been submitted yet." })]));
+    }
     imageInput.addEventListener("change", () => {
       const file = imageInput.files[0];
       fileName.textContent = file ? `Selected: ${file.name}` : "";
@@ -156,7 +178,7 @@
         try {
           const url = new URL("/api/results", window.location.origin);
           url.searchParams.set("wait", "true");
-          if (newestResultId) url.searchParams.set("after", newestResultId);
+          if (cursor) url.searchParams.set("after", cursor);
           const response = await fetchResults(url);
           if (!response.ok) throw new Error();
           const payload = await response.json();
@@ -165,8 +187,9 @@
             return;
           }
           const items = payload.results;
-          newestResultId = items[0]?.id || null;
+          cursor = payload.cursor;
           renderResults(items);
+          renderQueue(payload.jobs);
         } catch (_) {
           setStatus("The server is not responding. Check that it is running; retrying soon.", "error");
           await wait(1000);
@@ -177,18 +200,16 @@
       event.preventDefault();
       if (!imageInput.files.length) return;
       submitButton.disabled = true;
-      setStatus("Extracting text…");
+      setStatus("Adding image to the extraction queue…");
       try {
         const response = await fetch("/api/ocr", { method: "POST", body: new FormData(form) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || "Could not process the image.");
         const heading = document.createElement("h2");
         heading.textContent = "Latest submission";
-        submitted.replaceChildren(heading, resultCard(body));
+        submitted.replaceChildren(heading, jobCard(body));
         submitted.hidden = false;
-        setStatus("Text extracted successfully.", "success");
-        newestResultId = body.id;
-        renderResults([body, ...JSON.parse(lastResults || "[]").filter((item) => item.id !== body.id)]);
+        setStatus("Image queued for text extraction.", "success");
       } catch (error) {
         setStatus(error.message || "Could not process the image.", "error");
       } finally {

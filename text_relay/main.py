@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from hashlib import sha256
-import logging
 from pathlib import Path
 from types import FrameType
 from typing import Callable
@@ -15,10 +14,10 @@ from fastapi.responses import FileResponse
 import uvicorn
 
 from text_relay.config import Settings
-from text_relay.ocr import OCRError, OCRStrategy, create_ocr_strategy
-from text_relay.store import OCRResult, ResultStore
+from text_relay.ocr import OCRStrategy, create_ocr_strategy
+from text_relay.queue import OCRWorkItem, OCRWorkQueue
+from text_relay.store import OCRJob, OCRResult, ResultStore
 
-LOGGER = logging.getLogger(__name__)
 ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
@@ -51,6 +50,16 @@ def _result_payload(result: OCRResult) -> dict[str, str]:
     }
 
 
+def _job_payload(job: OCRJob) -> dict[str, str | dict[str, str] | None]:
+    return {
+        "id": job.id,
+        "created_at": job.created_at.isoformat().replace("+00:00", "Z"),
+        "image_checksum": job.image_checksum,
+        "status": job.status,
+        "result": _result_payload(job.result) if job.result is not None else None,
+    }
+
+
 def create_app(
     settings: Settings | None = None, *, ocr_strategy: OCRStrategy | None = None
 ) -> FastAPI:
@@ -60,11 +69,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        await app.state.ocr_queue.start()
         try:
             yield
         finally:
             app.state.is_shutting_down = True
             app.state.store.interrupt_waiters()
+            await app.state.ocr_queue.close()
             close = getattr(selected_strategy, "aclose", None)
             if close is not None:
                 await close()
@@ -72,7 +83,9 @@ def create_app(
     app = FastAPI(title="TextRelay", lifespan=lifespan)
     app.state.store = ResultStore(resolved_settings.max_result_history)
     app.state.ocr_strategy = selected_strategy
-    app.state.ocr_lock = asyncio.Lock()
+    app.state.ocr_queue = OCRWorkQueue(
+        selected_strategy, app.state.store, resolved_settings.ocr_workers
+    )
     app.state.is_shutting_down = False
 
     @app.get("/", response_class=FileResponse)
@@ -87,10 +100,10 @@ def create_app(
     async def recent_results(
         after: str | None = Query(default=None),
         wait: bool = Query(default=False),
-    ) -> dict[str, list[dict[str, str]] | str]:
+    ) -> dict[str, list[dict[str, str | dict[str, str] | None]] | str | None]:
         if wait:
             try:
-                records = await asyncio.to_thread(
+                await asyncio.to_thread(
                     app.state.store.wait_for_change,
                     after,
                     resolved_settings.long_poll_timeout_seconds,
@@ -98,17 +111,19 @@ def create_app(
             except asyncio.CancelledError:
                 app.state.store.interrupt_waiters()
                 raise
-        else:
-            records = app.state.store.recent()
-        payload: dict[str, list[dict[str, str]] | str] = {
-            "results": [_result_payload(result) for result in records]
+        payload: dict[str, list[dict[str, str | dict[str, str] | None]] | str | None] = {
+            "results": [_result_payload(result) for result in app.state.store.recent()],
+            "jobs": [_job_payload(job) for job in app.state.store.jobs()],
+            "cursor": app.state.store.change_id(),
         }
         if app.state.is_shutting_down:
             payload["server_status"] = "stopping"
         return payload
 
-    @app.post("/api/ocr")
-    async def perform_ocr(file: UploadFile | None = File(default=None)) -> dict[str, str]:
+    @app.post("/api/ocr", status_code=202)
+    async def perform_ocr(
+        file: UploadFile | None = File(default=None),
+    ) -> dict[str, str | dict[str, str] | None]:
         if file is None:
             raise HTTPException(status_code=400, detail="An image file is required.")
         content_type = file.content_type
@@ -129,19 +144,14 @@ def create_app(
             image = b"".join(chunks)
             image_checksum = sha256(image).hexdigest()
 
-            async with app.state.ocr_lock:
-                existing_result = app.state.store.find_by_image_checksum(image_checksum)
-                if existing_result is not None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="This image has already been processed.",
-                    )
-                try:
-                    text = await selected_strategy.extract_text(image, content_type)
-                except OCRError as error:
-                    LOGGER.warning("OCR failed: %s", error)
-                    raise HTTPException(status_code=422, detail="OCR failed to process the image.") from error
-                return _result_payload(app.state.store.add(text, image_checksum))
+            job = app.state.store.enqueue(image_checksum)
+            if job is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This image has already been submitted.",
+                )
+            await app.state.ocr_queue.submit(OCRWorkItem(job.id, image, content_type))
+            return _job_payload(job)
         finally:
             await file.close()
 

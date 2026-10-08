@@ -47,6 +47,7 @@ def test_settings_read_environment_overrides(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("MAX_UPLOAD_SIZE", "200")
     monkeypatch.setenv("MAX_RESULT_HISTORY", "5")
     monkeypatch.setenv("LONG_POLL_TIMEOUT_SECONDS", "3.5")
+    monkeypatch.setenv("OCR_WORKERS", "4")
 
     assert Settings.from_environment() == Settings(
         host="127.0.0.1",
@@ -60,6 +61,7 @@ def test_settings_read_environment_overrides(monkeypatch: pytest.MonkeyPatch) ->
         max_upload_size=200,
         max_result_history=5,
         long_poll_timeout_seconds=3.5,
+        ocr_workers=4,
     )
 
 

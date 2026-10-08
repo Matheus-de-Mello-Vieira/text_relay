@@ -68,11 +68,12 @@ All settings are optional environment variables:
 | `MAX_UPLOAD_SIZE` | `10485760` | Maximum image size in bytes (10 MiB) |
 | `MAX_RESULT_HISTORY` | `20` | Number of recent results retained |
 | `LONG_POLL_TIMEOUT_SECONDS` | `25` | Maximum duration of one results wait |
+| `OCR_WORKERS` | `2` | Maximum number of images extracted in parallel |
 
 For example:
 
 ```bash
-PORT=8080 MAX_RESULT_HISTORY=50 poetry run text-relay
+PORT=8080 MAX_RESULT_HISTORY=50 OCR_WORKERS=4 poetry run text-relay
 ```
 
 To bind to your computer's IP on a specific network, add this to `.env` in
@@ -121,10 +122,11 @@ OpenAI key, and OpenAI mode does not require a Tesseract installation.
 The OCR history is held only in memory and is cleared when the server restarts.
 Run Uvicorn with a single worker: multiple workers have separate histories.
 
-Each retained OCR result records the SHA-256 checksum of its uploaded image.
-Submitting an image with the same bytes again shows an error without running OCR
-or adding another history entry. Once a result has aged out of the bounded
-history (or after a restart), that image can be processed again.
+Each upload is accepted immediately and enters the shared extraction queue.
+The browser shows whether each queued image is waiting, processing, completed,
+or failed; up to `OCR_WORKERS` extractions run at once. Each retained OCR job
+records the SHA-256 checksum of its uploaded image. Submitting the same bytes
+again shows an error without adding duplicate work.
 
 Open browsers synchronize through long polling: a results request waits until a
 new OCR result arrives or its 25-second timeout expires, then the browser
