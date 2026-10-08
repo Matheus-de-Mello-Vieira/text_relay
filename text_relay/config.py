@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ipaddress import ip_address, ip_network
 import os
 from pathlib import Path
+import socket
+
+import psutil
 
 
 DEFAULT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -35,7 +39,7 @@ class Settings:
         """Create settings from environment variables and a local dotenv file."""
         dotenv_values = _read_dotenv(Path.cwd() / ".env")
         return cls(
-            host=_setting("HOST", dotenv_values, cls.host),
+            host=_bind_host(dotenv_values, cls.host),
             port=_positive_int("PORT", dotenv_values, cls.port),
             ocr_language=_setting("OCR_LANGUAGE", dotenv_values, cls.ocr_language),
             ocr_psm=_positive_int("OCR_PSM", dotenv_values, cls.ocr_psm),
@@ -64,6 +68,29 @@ class Settings:
 
 def _setting(name: str, dotenv_values: dict[str, str], default: str) -> str:
     return os.getenv(name, dotenv_values.get(name, default))
+
+
+def _bind_host(dotenv_values: dict[str, str], default: str) -> str:
+    cidr = _optional_setting("HOST_CIDR", dotenv_values)
+    if cidr is None:
+        return _setting("HOST", dotenv_values, default)
+
+    try:
+        if "/" not in cidr:
+            raise ValueError("Missing network prefix")
+        network = ip_network(cidr, strict=False)
+    except ValueError as error:
+        raise ValueError("HOST_CIDR must be a valid IPv4 or IPv6 CIDR block") from error
+
+    interfaces = psutil.net_if_addrs()
+    for name in sorted(interfaces):
+        for address in interfaces[name]:
+            if address.family not in {socket.AF_INET, socket.AF_INET6}:
+                continue
+            if ip_address(address.address) in network:
+                return address.address
+
+    raise ValueError(f"No local IP address matches HOST_CIDR={cidr}")
 
 
 def _positive_int(name: str, dotenv_values: dict[str, str], default: int) -> int:

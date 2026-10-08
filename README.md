@@ -58,6 +58,7 @@ All settings are optional environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `0.0.0.0` | Bind host |
+| `HOST_CIDR` | unset | Select a local IP in this CIDR block; overrides `HOST` |
 | `PORT` | `8000` | Bind port |
 | `OCR_PROVIDER` | `tesseract` | OCR provider: `tesseract` or `openai` |
 | `OCR_LANGUAGE` | `eng` | Tesseract language |
@@ -73,6 +74,20 @@ For example:
 ```bash
 PORT=8080 MAX_RESULT_HISTORY=50 poetry run text-relay
 ```
+
+To bind to your computer's IP on a specific network, add this to `.env` in
+the directory where you start the server:
+
+```dotenv
+HOST_CIDR=192.168.0.0/24
+```
+
+The server checks local interface addresses and listens on the first matching
+IP, ordered by interface name. IPv4 and IPv6 CIDR blocks are supported.
+Startup fails with a clear error if the CIDR is invalid or no local IP matches.
+An unset or empty `HOST_CIDR` uses `HOST` as before. Process environment values
+take precedence over `.env` values. When bound to a specific IP, use that IP
+instead of `localhost` in both computer and phone browsers.
 
 ### Local Tesseract OCR
 

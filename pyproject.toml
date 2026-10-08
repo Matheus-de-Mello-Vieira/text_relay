@@ -10,6 +10,7 @@ dependencies = [
     "python-multipart>=0.0.20,<1.0",
     "uvicorn>=0.34,<1.0",
     "openai (>=2.0,<3.0)",
+    "psutil (>=7.0,<8.0)",
 ]
 
 [project.scripts]

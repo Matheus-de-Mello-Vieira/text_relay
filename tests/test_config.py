@@ -1,6 +1,32 @@
+import socket
+from types import SimpleNamespace
+
 import pytest
 
+from text_relay import config
 from text_relay.config import Settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_cidr_setting(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("HOST_CIDR", raising=False)
+
+
+@pytest.fixture
+def local_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    interfaces = {
+        "lo": [SimpleNamespace(family=socket.AF_INET, address="127.0.0.1")],
+        "en1": [SimpleNamespace(family=socket.AF_INET, address="192.168.0.50")],
+        "en0": [
+            SimpleNamespace(family=config.psutil.AF_LINK, address="aa:bb:cc:dd:ee:ff"),
+            SimpleNamespace(family=socket.AF_INET, address="10.0.0.2"),
+            SimpleNamespace(family=socket.AF_INET, address="192.168.0.42"),
+            SimpleNamespace(family=socket.AF_INET6, address="fd00::42"),
+            SimpleNamespace(family=socket.AF_INET6, address="fe80::42%en0"),
+        ],
+    }
+    monkeypatch.setattr(config.psutil, "net_if_addrs", lambda: interfaces)
 
 
 def test_settings_default_port_is_8000(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,3 +80,63 @@ def test_settings_read_port_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatc
     (tmp_path / ".env").write_text("PORT=7001\n", encoding="utf-8")
 
     assert Settings.from_environment().port == 7001
+
+
+def test_settings_select_local_ip_from_dotenv_cidr(tmp_path, local_interfaces) -> None:
+    (tmp_path / ".env").write_text(
+        "HOST=127.0.0.1\nHOST_CIDR=192.168.0.0/24\n", encoding="utf-8"
+    )
+
+    assert Settings.from_environment().host == "192.168.0.42"
+
+
+def test_environment_cidr_overrides_dotenv(tmp_path, local_interfaces, monkeypatch) -> None:
+    (tmp_path / ".env").write_text("HOST_CIDR=10.0.0.0/24\n", encoding="utf-8")
+    monkeypatch.setenv("HOST_CIDR", "192.168.0.0/24")
+
+    assert Settings.from_environment().host == "192.168.0.42"
+
+
+@pytest.mark.parametrize(
+    ("cidr", "expected"),
+    [
+        ("192.168.0.42/24", "192.168.0.42"),
+        ("192.168.0.42/32", "192.168.0.42"),
+        ("fd00::/64", "fd00::42"),
+        ("fe80::/64", "fe80::42%en0"),
+    ],
+)
+def test_settings_select_matching_address(cidr, expected, local_interfaces, monkeypatch) -> None:
+    monkeypatch.setenv("HOST_CIDR", cidr)
+
+    assert Settings.from_environment().host == expected
+
+
+@pytest.mark.parametrize("cidr", ["not-a-cidr", "192.168.0.0/33", "192.168.0.42"])
+def test_settings_reject_invalid_cidr(cidr, monkeypatch) -> None:
+    monkeypatch.setenv("HOST_CIDR", cidr)
+
+    with pytest.raises(ValueError, match="HOST_CIDR must be a valid"):
+        Settings.from_environment()
+
+
+def test_settings_reject_network_without_local_address(local_interfaces, monkeypatch) -> None:
+    monkeypatch.setenv("HOST_CIDR", "172.16.0.0/24")
+
+    with pytest.raises(ValueError, match="No local IP address matches HOST_CIDR"):
+        Settings.from_environment()
+
+
+@pytest.mark.parametrize("cidr", [None, ""])
+def test_settings_keep_host_without_cidr(cidr, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    if cidr is not None:
+        (tmp_path / ".env").write_text("HOST_CIDR=10.0.0.0/24\n", encoding="utf-8")
+        monkeypatch.setenv("HOST_CIDR", cidr)
+
+    def unexpected_discovery():
+        pytest.fail("Interface discovery should only run when HOST_CIDR is set")
+
+    monkeypatch.setattr(config.psutil, "net_if_addrs", unexpected_discovery)
+
+    assert Settings.from_environment().host == "127.0.0.1"
