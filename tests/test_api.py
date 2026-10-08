@@ -1,4 +1,5 @@
 import signal
+from hashlib import sha256
 from threading import Thread
 
 from fastapi.testclient import TestClient
@@ -29,6 +30,15 @@ def make_client(strategy: FakeOCRStrategy, *, maximum_size: int = 1024, history_
 
 def image_request(client: TestClient):
     return client.post("/api/ocr", files={"file": ("photo.png", b"image", "image/png")})
+
+
+def result_payload(result) -> dict[str, str]:
+    return {
+        "id": result.id,
+        "created_at": result.created_at.isoformat().replace("+00:00", "Z"),
+        "text": result.text,
+        "image_checksum": result.image_checksum,
+    }
 
 
 def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
@@ -64,6 +74,7 @@ def test_upload_returns_result_and_adds_it_to_history() -> None:
     assert response.status_code == 200
     result = response.json()
     assert result["text"] == "Extracted text"
+    assert result["image_checksum"] == sha256(b"image").hexdigest()
     assert strategy.calls == [(b"image", "image/png")]
     assert result["id"] and result["created_at"].endswith("Z")
     assert client.get("/api/results").json() == {"results": [result]}
@@ -71,15 +82,11 @@ def test_upload_returns_result_and_adds_it_to_history() -> None:
 
 def test_long_poll_returns_immediately_when_results_have_changed() -> None:
     client = make_client(FakeOCRStrategy())
-    latest = client.app.state.store.add("new result")
+    latest = client.app.state.store.add("new result", "checksum")
 
     response = client.get("/api/results?wait=true&after=older-result")
 
-    assert response.json() == {"results": [{
-        "id": latest.id,
-        "created_at": latest.created_at.isoformat().replace("+00:00", "Z"),
-        "text": "new result",
-    }]}
+    assert response.json() == {"results": [result_payload(latest)]}
 
 
 def test_results_are_newest_first_and_bounded() -> None:
@@ -90,9 +97,29 @@ def test_results_are_newest_first_and_bounded() -> None:
         return next(texts)
     strategy.extract_text = extract  # type: ignore[method-assign]
     client = make_client(strategy)
-    for _ in range(3):
-        assert image_request(client).status_code == 200
+    for image in (b"first-image", b"second-image", b"third-image"):
+        response = client.post(
+            "/api/ocr",
+            files={"file": ("photo.png", image, "image/png")},
+        )
+        assert response.status_code == 200
     assert [item["text"] for item in client.get("/api/results").json()["results"]] == ["third", "second"]
+
+
+def test_duplicate_image_is_rejected_without_running_ocr_again() -> None:
+    strategy = FakeOCRStrategy("Extracted text")
+    client = make_client(strategy)
+
+    original = image_request(client)
+    duplicate = image_request(client)
+
+    assert original.status_code == 200
+    assert (duplicate.status_code, duplicate.json()) == (
+        409,
+        {"detail": "This image has already been processed."},
+    )
+    assert strategy.calls == [(b"image", "image/png")]
+    assert client.get("/api/results").json() == {"results": [original.json()]}
 
 
 def test_invalid_and_empty_uploads_are_rejected() -> None:

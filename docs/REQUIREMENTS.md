@@ -127,6 +127,7 @@ A successful OCR operation must produce a result containing:
 unique ID
 creation timestamp
 extracted text
+image checksum
 ```
 
 ---
@@ -254,7 +255,8 @@ Successful response example:
 {
   "id": "a6daa88c-f48b-4fe9-9310-34aa94570af2",
   "created_at": "2026-10-04T21:40:00Z",
-  "text": "Extracted text"
+  "text": "Extracted text",
+  "image_checksum": "<SHA-256 hex digest>"
 }
 ```
 
@@ -272,7 +274,8 @@ Example:
     {
       "id": "a6daa88c-f48b-4fe9-9310-34aa94570af2",
       "created_at": "2026-10-04T21:40:00Z",
-      "text": "Newest result"
+      "text": "Newest result",
+      "image_checksum": "<SHA-256 hex digest>"
     }
   ]
 }

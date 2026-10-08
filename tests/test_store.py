@@ -4,19 +4,23 @@ from time import monotonic
 from text_relay.store import ResultStore
 
 
+def add(store: ResultStore, text: str):
+    return store.add(text, f"checksum-{text}")
+
+
 def test_results_are_newest_first() -> None:
     store = ResultStore(maximum_size=3)
-    oldest = store.add("oldest")
-    newest = store.add("newest")
+    oldest = add(store, "oldest")
+    newest = add(store, "newest")
 
     assert store.recent() == [newest, oldest]
 
 
 def test_history_is_bounded() -> None:
     store = ResultStore(maximum_size=2)
-    store.add("first")
-    second = store.add("second")
-    third = store.add("third")
+    add(store, "first")
+    second = add(store, "second")
+    third = add(store, "third")
 
     assert store.recent() == [third, second]
 
@@ -32,7 +36,7 @@ def test_wait_for_change_returns_when_a_result_is_added() -> None:
     thread.join(timeout=0.05)
     assert thread.is_alive()
 
-    added = store.add("new")
+    added = add(store, "new")
     thread.join(timeout=1)
 
     assert not thread.is_alive()
@@ -41,7 +45,7 @@ def test_wait_for_change_returns_when_a_result_is_added() -> None:
 
 def test_wait_for_change_returns_after_timeout_when_history_is_unchanged() -> None:
     store = ResultStore(maximum_size=2)
-    existing = store.add("existing")
+    existing = add(store, "existing")
 
     started = monotonic()
     results = store.wait_for_change(existing.id, timeout_seconds=0.02)
@@ -66,3 +70,11 @@ def test_interrupt_waiters_releases_long_poll_immediately() -> None:
 
     assert not thread.is_alive()
     assert received == [[]]
+
+
+def test_finds_retained_result_by_image_checksum() -> None:
+    store = ResultStore(maximum_size=2)
+    expected = store.add("text", "checksum")
+
+    assert store.find_by_image_checksum("checksum") == expected
+    assert store.find_by_image_checksum("other") is None

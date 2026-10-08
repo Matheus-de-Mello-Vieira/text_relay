@@ -121,6 +121,11 @@ OpenAI key, and OpenAI mode does not require a Tesseract installation.
 The OCR history is held only in memory and is cleared when the server restarts.
 Run Uvicorn with a single worker: multiple workers have separate histories.
 
+Each retained OCR result records the SHA-256 checksum of its uploaded image.
+Submitting an image with the same bytes again shows an error without running OCR
+or adding another history entry. Once a result has aged out of the bounded
+history (or after a restart), that image can be processed again.
+
 Open browsers synchronize through long polling: a results request waits until a
 new OCR result arrives or its 25-second timeout expires, then the browser
 immediately opens the next request.

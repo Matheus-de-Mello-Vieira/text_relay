@@ -16,6 +16,7 @@ class OCRResult:
     id: str
     created_at: datetime
     text: str
+    image_checksum: str
 
 
 class ResultStore:
@@ -28,17 +29,26 @@ class ResultStore:
         self._changed = Condition()
         self._waiters_interrupted = False
 
-    def add(self, text: str) -> OCRResult:
+    def add(self, text: str, image_checksum: str) -> OCRResult:
         """Create and retain one result, returning the new record."""
         result = OCRResult(
             id=str(uuid4()),
             created_at=datetime.now(UTC),
             text=text,
+            image_checksum=image_checksum,
         )
         with self._changed:
             self._results.appendleft(result)
             self._changed.notify_all()
         return result
+
+    def find_by_image_checksum(self, image_checksum: str) -> OCRResult | None:
+        """Return the retained result for an image checksum, if one exists."""
+        with self._changed:
+            return next(
+                (result for result in self._results if result.image_checksum == image_checksum),
+                None,
+            )
 
     def recent(self) -> list[OCRResult]:
         """Return a stable newest-first snapshot of the current history."""

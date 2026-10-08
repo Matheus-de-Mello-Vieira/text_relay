@@ -226,6 +226,8 @@ validate
     ↓
 read validated image bytes
     ↓
+calculate SHA-256 image checksum and reuse a retained matching result
+    ↓
 call OCRStrategy.extract_text
     ↓
 create OCR result
@@ -239,7 +241,8 @@ Example response:
 {
   "id": "0199...",
   "created_at": "2026-10-04T21:30:00Z",
-  "text": "Recognized text..."
+  "text": "Recognized text...",
+  "image_checksum": "<SHA-256 hex digest>"
 }
 ```
 
@@ -321,6 +324,12 @@ deque(maxlen=20)
 ```
 
 Persistence across application restarts is not required.
+
+Each result retains the SHA-256 checksum of the image bytes that produced it.
+Before OCR starts, reject a request for an image with a retained matching
+checksum with HTTP 409 rather than processing or storing it again. This check
+and result creation must be serialized so concurrent uploads of the same image
+cannot both invoke OCR.
 
 This means restarting the server intentionally clears history.
 

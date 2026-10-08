@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from hashlib import sha256
 import logging
 from pathlib import Path
 from types import FrameType
@@ -34,7 +35,12 @@ class LongPollShutdownServer(uvicorn.Server):
 
 
 def _result_payload(result: OCRResult) -> dict[str, str]:
-    return {"id": result.id, "created_at": result.created_at.isoformat().replace("+00:00", "Z"), "text": result.text}
+    return {
+        "id": result.id,
+        "created_at": result.created_at.isoformat().replace("+00:00", "Z"),
+        "text": result.text,
+        "image_checksum": result.image_checksum,
+    }
 
 
 def create_app(
@@ -57,6 +63,7 @@ def create_app(
     app = FastAPI(title="TextRelay", lifespan=lifespan)
     app.state.store = ResultStore(resolved_settings.max_result_history)
     app.state.ocr_strategy = selected_strategy
+    app.state.ocr_lock = asyncio.Lock()
 
     @app.get("/", response_class=FileResponse)
     async def index() -> FileResponse:
@@ -104,12 +111,22 @@ def create_app(
 
             if total_size == 0:
                 raise HTTPException(status_code=400, detail="Image upload is empty.")
-            try:
-                text = await selected_strategy.extract_text(b"".join(chunks), content_type)
-            except OCRError as error:
-                LOGGER.warning("OCR failed: %s", error)
-                raise HTTPException(status_code=422, detail="OCR failed to process the image.") from error
-            return _result_payload(app.state.store.add(text))
+            image = b"".join(chunks)
+            image_checksum = sha256(image).hexdigest()
+
+            async with app.state.ocr_lock:
+                existing_result = app.state.store.find_by_image_checksum(image_checksum)
+                if existing_result is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="This image has already been processed.",
+                    )
+                try:
+                    text = await selected_strategy.extract_text(image, content_type)
+                except OCRError as error:
+                    LOGGER.warning("OCR failed: %s", error)
+                    raise HTTPException(status_code=422, detail="OCR failed to process the image.") from error
+                return _result_payload(app.state.store.add(text, image_checksum))
         finally:
             await file.close()
 
