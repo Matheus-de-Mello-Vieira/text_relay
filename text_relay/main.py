@@ -25,11 +25,19 @@ ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp
 class LongPollShutdownServer(uvicorn.Server):
     """Notify long polls as soon as Uvicorn receives a shutdown signal."""
 
-    def __init__(self, config: uvicorn.Config, interrupt_waiters: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        config: uvicorn.Config,
+        interrupt_waiters: Callable[[], None],
+        mark_stopping: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(config)
         self._interrupt_waiters = interrupt_waiters
+        self._mark_stopping = mark_stopping
 
     def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        if self._mark_stopping is not None:
+            self._mark_stopping()
         self._interrupt_waiters()
         super().handle_exit(sig, frame)
 
@@ -55,6 +63,7 @@ def create_app(
         try:
             yield
         finally:
+            app.state.is_shutting_down = True
             app.state.store.interrupt_waiters()
             close = getattr(selected_strategy, "aclose", None)
             if close is not None:
@@ -64,6 +73,7 @@ def create_app(
     app.state.store = ResultStore(resolved_settings.max_result_history)
     app.state.ocr_strategy = selected_strategy
     app.state.ocr_lock = asyncio.Lock()
+    app.state.is_shutting_down = False
 
     @app.get("/", response_class=FileResponse)
     async def index() -> FileResponse:
@@ -77,7 +87,7 @@ def create_app(
     async def recent_results(
         after: str | None = Query(default=None),
         wait: bool = Query(default=False),
-    ) -> dict[str, list[dict[str, str]]]:
+    ) -> dict[str, list[dict[str, str]] | str]:
         if wait:
             try:
                 records = await asyncio.to_thread(
@@ -90,7 +100,12 @@ def create_app(
                 raise
         else:
             records = app.state.store.recent()
-        return {"results": [_result_payload(result) for result in records]}
+        payload: dict[str, list[dict[str, str]] | str] = {
+            "results": [_result_payload(result) for result in records]
+        }
+        if app.state.is_shutting_down:
+            payload["server_status"] = "stopping"
+        return payload
 
     @app.post("/api/ocr")
     async def perform_ocr(file: UploadFile | None = File(default=None)) -> dict[str, str]:
@@ -146,7 +161,11 @@ def main() -> None:
         port=settings.port,
     )
     try:
-        LongPollShutdownServer(config, server_app.state.store.interrupt_waiters).run()
+        LongPollShutdownServer(
+            config,
+            server_app.state.store.interrupt_waiters,
+            lambda: setattr(server_app.state, "is_shutting_down", True),
+        ).run()
     except KeyboardInterrupt:
         # Uvicorn replays Ctrl+C after restoring the previous signal handler.
         pass

@@ -52,6 +52,10 @@ def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
     assert 'url.searchParams.set("wait", "true")' in response.text
     assert "window.setInterval" not in response.text
     assert "navigator.clipboard.writeText" in response.text
+    assert "RESULTS_REQUEST_TIMEOUT_MS" in response.text
+    assert 'payload.server_status === "stopping"' in response.text
+    assert "The server is shutting down." in response.text
+    assert "The server is not responding." in response.text
 
 
 def test_app_icon_is_served_as_a_png() -> None:
@@ -146,6 +150,7 @@ def test_shutdown_signal_releases_all_long_polls_immediately() -> None:
     server = LongPollShutdownServer(
         uvicorn.Config(app),
         app.state.store.interrupt_waiters,
+        lambda: setattr(app.state, "is_shutting_down", True),
     )
     received: list[list] = []
     thread = Thread(
@@ -161,6 +166,8 @@ def test_shutdown_signal_releases_all_long_polls_immediately() -> None:
     assert not thread.is_alive()
     assert received == [[]]
     assert server.should_exit
+    response = TestClient(app).get("/api/results")
+    assert response.json()["server_status"] == "stopping"
 
 
 def test_main_creates_a_server_with_the_configured_address(monkeypatch) -> None:
@@ -168,7 +175,11 @@ def test_main_creates_a_server_with_the_configured_address(monkeypatch) -> None:
     captured: dict[str, object] = {}
     monkeypatch.setattr(main.Settings, "from_environment", lambda: settings)
     monkeypatch.setattr(main.uvicorn, "Config", lambda app, **kwargs: captured.update(kwargs))
-    monkeypatch.setattr(main, "LongPollShutdownServer", lambda config, interrupt: type("Server", (), {"run": lambda self: None})())
+    monkeypatch.setattr(
+        main,
+        "LongPollShutdownServer",
+        lambda config, interrupt, mark_stopping: type("Server", (), {"run": lambda self: None})(),
+    )
 
     main.main()
 
@@ -184,6 +195,10 @@ def test_main_suppresses_uvicorns_replayed_keyboard_interrupt(monkeypatch) -> No
             raise KeyboardInterrupt
 
     monkeypatch.setattr(main.uvicorn, "Config", lambda app, **kwargs: None)
-    monkeypatch.setattr(main, "LongPollShutdownServer", lambda config, interrupt: InterruptingServer())
+    monkeypatch.setattr(
+        main,
+        "LongPollShutdownServer",
+        lambda config, interrupt, mark_stopping: InterruptingServer(),
+    )
 
     main.main()
