@@ -39,7 +39,7 @@
     button { border: 0; font: inherit; font-weight: 700; cursor: pointer; }
     #submit { display: inline-flex; width: 100%; min-height: 3rem; align-items: center; justify-content: center; margin-top: 1rem; border-radius: .75rem; background: #4655bc; box-shadow: 0 .45rem 1rem #4655bc33; color: white; transition: transform .16s, background .16s, box-shadow .16s; }
     #submit:hover:not(:disabled) { background: #3948a8; box-shadow: 0 .6rem 1.2rem #4655bc40; transform: translateY(-1px); }
-    #submit:focus-visible, .copy-button:focus-visible, .file-picker:focus-within { outline: 3px solid #9ca7f5; outline-offset: 3px; }
+    #submit:focus-visible, .copy-button:focus-visible, .retry-button:focus-visible, .file-picker:focus-within { outline: 3px solid #9ca7f5; outline-offset: 3px; }
     button:disabled { cursor: wait; opacity: .72; }
     #status { min-height: 1.5rem; margin: .85rem .1rem 0; color: #63708a; font-size: .9rem; }
     #status:not(:empty)::before { content: ""; display: inline-block; width: .48rem; height: .48rem; margin-right: .45rem; border-radius: 50%; background: currentColor; vertical-align: .08em; }
@@ -57,10 +57,12 @@
     time { color: #7b869c; font-size: .8rem; }
     .copy-button { padding: .38rem .65rem; border: 1px solid #dce1ec; border-radius: .5rem; background: #fff; color: #43516d; font-size: .78rem; transition: background .16s, border-color .16s; }
     .copy-button:hover { border-color: #9fa9c6; background: #f5f6fa; }
+    .retry-button { padding: .38rem .65rem; border: 1px solid #e7b9bd; border-radius: .5rem; background: #fff; color: #a52f39; font-size: .78rem; }
+    .retry-button:hover:not(:disabled) { background: #fff3f4; }
     pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
     .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
     @media (max-width: 480px) { main { width: min(100% - 1.4rem, 780px); padding-top: 1.5rem; } h1 { margin-top: 1.5rem; } .upload-panel { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; gap: .55rem; } }
-    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } .retry-button { border-color: #75434a; background: #29202d; color: #ffb9bf; } .retry-button:hover:not(:disabled) { background: #3a2632; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
   </style>
 </head>
 <body>
@@ -145,8 +147,36 @@
       const label = document.createElement("span");
       label.className = `job-status ${job.status}`;
       label.textContent = job.status;
-      card.append(details, label);
+      const state = document.createElement("span");
+      state.style.display = "inline-flex";
+      state.style.alignItems = "center";
+      state.style.gap = ".6rem";
+      state.append(label);
+      if (job.status === "failed") {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "retry-button";
+        retry.textContent = "Retry";
+        retry.setAttribute("aria-label", `Retry extraction submitted ${displayTime(job.created_at)}`);
+        retry.addEventListener("click", () => retryJob(job.id, retry));
+        state.append(retry);
+      }
+      card.append(details, state);
       return card;
+    }
+    async function retryJob(jobId, button) {
+      button.disabled = true;
+      button.textContent = "Retrying…";
+      try {
+        const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not retry this extraction.");
+        setStatus("Extraction queued again.", "success");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Retry";
+        setStatus(error.message || "Could not retry this extraction.", "error");
+      }
     }
     function renderQueue(items) {
       queue.replaceChildren(...(items.length ? items.map(jobCard) : [Object.assign(document.createElement("div"), { className: "empty-state", textContent: "No images have been submitted yet." })]));

@@ -28,6 +28,8 @@ class OCRJob:
     image_checksum: str
     status: str
     result: OCRResult | None = None
+    image: bytes = b""
+    content_type: str = ""
 
 
 class ResultStore:
@@ -56,7 +58,9 @@ class ResultStore:
             self._publish_change()
         return result
 
-    def enqueue(self, image_checksum: str) -> OCRJob | None:
+    def enqueue(
+        self, image_checksum: str, image: bytes = b"", content_type: str = ""
+    ) -> OCRJob | None:
         """Reserve an image for OCR unless it is already queued or retained."""
         with self._changed:
             if image_checksum in self._jobs_by_checksum:
@@ -66,11 +70,21 @@ class ResultStore:
                 created_at=datetime.now(UTC),
                 image_checksum=image_checksum,
                 status="queued",
+                image=image,
+                content_type=content_type,
             )
             self._jobs.appendleft(job)
             self._jobs_by_checksum[image_checksum] = job
             self._publish_change()
             return job
+
+    def retry(self, job_id: str) -> OCRJob | None:
+        """Requeue a failed job while retaining its original uploaded image."""
+        with self._changed:
+            job = self._get_job(job_id)
+            if job is None or job.status != "failed":
+                return None
+            return self._replace_job_locked(job, status="queued")
 
     def mark_processing(self, job_id: str) -> OCRJob | None:
         return self._replace_job(job_id, status="processing")
@@ -161,6 +175,8 @@ class ResultStore:
             image_checksum=job.image_checksum,
             status=status,
             result=result,
+            image=job.image,
+            content_type=job.content_type,
         )
         self._jobs.remove(job)
         self._jobs.appendleft(replacement)

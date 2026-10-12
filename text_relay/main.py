@@ -144,7 +144,7 @@ def create_app(
             image = b"".join(chunks)
             image_checksum = sha256(image).hexdigest()
 
-            job = app.state.store.enqueue(image_checksum)
+            job = app.state.store.enqueue(image_checksum, image, content_type)
             if job is None:
                 raise HTTPException(
                     status_code=409,
@@ -154,6 +154,19 @@ def create_app(
             return _job_payload(job)
         finally:
             await file.close()
+
+    @app.post("/api/jobs/{job_id}/retry", status_code=202)
+    async def retry_ocr(job_id: str) -> dict[str, str | dict[str, str] | None]:
+        job = app.state.store.retry(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Only retained failed extractions can be retried.",
+            )
+        await app.state.ocr_queue.submit(
+            OCRWorkItem(job.id, job.image, job.content_type)
+        )
+        return _job_payload(job)
 
     return app
 
