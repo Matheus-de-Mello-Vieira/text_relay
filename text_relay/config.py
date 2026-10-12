@@ -15,6 +15,7 @@ DEFAULT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 DEFAULT_MAX_RESULT_HISTORY = 20
 DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25.0
 DEFAULT_OCR_WORKERS = 2
+DEFAULT_OCR_RETRIES = 3
 OCR_PROVIDERS = {"tesseract", "openai"}
 OPENAI_IMAGE_DETAILS = {"low", "high", "original", "auto"}
 
@@ -35,6 +36,7 @@ class Settings:
     max_result_history: int = DEFAULT_MAX_RESULT_HISTORY
     long_poll_timeout_seconds: float = DEFAULT_LONG_POLL_TIMEOUT_SECONDS
     ocr_workers: int = DEFAULT_OCR_WORKERS
+    ocr_retries: int = DEFAULT_OCR_RETRIES
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -66,6 +68,7 @@ class Settings:
                 cls.long_poll_timeout_seconds,
             ),
             ocr_workers=_positive_int("OCR_WORKERS", dotenv_values, cls.ocr_workers),
+            ocr_retries=_non_negative_int("OCR_RETRIES", dotenv_values, cls.ocr_retries),
         )
 
 
@@ -108,6 +111,17 @@ def _positive_int(name: str, dotenv_values: dict[str, str], default: int) -> int
     if parsed <= 0:
         message = f"{name} must be a positive integer"
         raise ValueError(message)
+    return parsed
+
+
+def _non_negative_int(name: str, dotenv_values: dict[str, str], default: int) -> int:
+    value = _setting(name, dotenv_values, str(default))
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a non-negative integer") from error
+    if parsed < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
     return parsed
 
 

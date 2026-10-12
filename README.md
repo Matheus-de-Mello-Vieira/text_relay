@@ -69,11 +69,12 @@ All settings are optional environment variables:
 | `MAX_RESULT_HISTORY` | `20` | Number of recent results retained |
 | `LONG_POLL_TIMEOUT_SECONDS` | `25` | Maximum duration of one results wait |
 | `OCR_WORKERS` | `2` | Maximum number of images extracted in parallel |
+| `OCR_RETRIES` | `3` | Additional OCR attempts after a failure, for new uploads and manual retries |
 
 For example:
 
 ```bash
-PORT=8080 MAX_RESULT_HISTORY=50 OCR_WORKERS=4 poetry run text-relay
+PORT=8080 MAX_RESULT_HISTORY=50 OCR_WORKERS=4 OCR_RETRIES=3 poetry run text-relay
 ```
 
 To bind to your computer's IP on a specific network, add this to `.env` in
@@ -127,6 +128,9 @@ The browser shows whether each queued image is waiting, processing, completed,
 or failed; up to `OCR_WORKERS` extractions run at once. Each retained OCR job
 records the SHA-256 checksum of its uploaded image. Submitting the same bytes
 again shows an error without adding duplicate work.
+When OCR fails, the server retries up to `OCR_RETRIES` additional times before
+marking the job failed. Clicking Retry on a failed job starts a fresh run with
+the same retry policy.
 
 Open browsers synchronize through long polling: a results request waits until a
 new OCR result arrives or its 25-second timeout expires, then the browser

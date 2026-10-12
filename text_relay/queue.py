@@ -25,10 +25,13 @@ class OCRWorkItem:
 class OCRWorkQueue:
     """Runs queued OCR jobs with a fixed number of asynchronous workers."""
 
-    def __init__(self, strategy: OCRStrategy, store: ResultStore, worker_count: int) -> None:
+    def __init__(
+        self, strategy: OCRStrategy, store: ResultStore, worker_count: int, retry_count: int = 0
+    ) -> None:
         self._strategy = strategy
         self._store = store
         self._worker_count = worker_count
+        self._retry_count = retry_count
         self._queue: asyncio.Queue[OCRWorkItem] = asyncio.Queue()
         self._workers: list[asyncio.Task[None]] = []
         self._started = False
@@ -60,15 +63,17 @@ class OCRWorkQueue:
             item = await self._queue.get()
             try:
                 self._store.mark_processing(item.job_id)
-                try:
-                    text = await self._strategy.extract_text(item.image, item.content_type)
-                except OCRError as error:
-                    LOGGER.warning("OCR failed: %s", error)
-                    self._store.fail(item.job_id)
-                except Exception:
-                    LOGGER.exception("Unexpected OCR worker failure")
-                    self._store.fail(item.job_id)
+                for attempt in range(self._retry_count + 1):
+                    try:
+                        text = await self._strategy.extract_text(item.image, item.content_type)
+                    except OCRError as error:
+                        LOGGER.warning("OCR attempt %s failed: %s", attempt + 1, error)
+                    except Exception:
+                        LOGGER.exception("Unexpected OCR attempt %s failure", attempt + 1)
+                    else:
+                        self._store.complete(item.job_id, text)
+                        break
                 else:
-                    self._store.complete(item.job_id, text)
+                    self._store.fail(item.job_id)
             finally:
                 self._queue.task_done()

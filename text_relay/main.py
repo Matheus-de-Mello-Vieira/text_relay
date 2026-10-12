@@ -84,7 +84,10 @@ def create_app(
     app.state.store = ResultStore(resolved_settings.max_result_history)
     app.state.ocr_strategy = selected_strategy
     app.state.ocr_queue = OCRWorkQueue(
-        selected_strategy, app.state.store, resolved_settings.ocr_workers
+        selected_strategy,
+        app.state.store,
+        resolved_settings.ocr_workers,
+        resolved_settings.ocr_retries,
     )
     app.state.is_shutting_down = False
 
