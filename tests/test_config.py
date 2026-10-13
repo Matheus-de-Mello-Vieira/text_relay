@@ -1,16 +1,31 @@
+import os
 import socket
 from types import SimpleNamespace
 
 import pytest
 
 from text_relay import config
-from text_relay.config import OCRProfileCatalog, Settings
+from text_relay.config import OCRProfileCatalog, Settings, environment_value
 
 
 @pytest.fixture(autouse=True)
-def isolate_cidr_setting(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_environment(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    original_environment = os.environ.copy()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("HOST_CIDR", raising=False)
+    for name in (
+        "HOST",
+        "HOST_CIDR",
+        "PORT",
+        "MAX_UPLOAD_SIZE",
+        "MAX_RESULT_HISTORY",
+        "LONG_POLL_TIMEOUT_SECONDS",
+        "OCR_WORKERS",
+        "OCR_RETRIES",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    yield
+    os.environ.clear()
+    os.environ.update(original_environment)
 
 
 @pytest.fixture
@@ -88,6 +103,30 @@ def test_settings_read_port_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatc
     (tmp_path / ".env").write_text("PORT=7001\n", encoding="utf-8")
 
     assert Settings.from_environment().port == 7001
+    assert os.environ["PORT"] == "7001"
+
+
+def test_dotenv_does_not_override_process_environment(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".env").write_text(
+        'PORT=7001\nAPI_KEY="file key"\n', encoding="utf-8"
+    )
+    monkeypatch.setenv("PORT", "9000")
+    monkeypatch.setenv("API_KEY", "process key")
+
+    assert Settings.from_environment().port == 9000
+    assert environment_value("API_KEY") == "process key"
+    assert os.environ["API_KEY"] == "process key"
+
+
+def test_environment_value_loads_quoted_dotenv_value(tmp_path) -> None:
+    (tmp_path / ".env").write_text(
+        'TEXT_RELAY_TEST_KEY="a=b # c"\n', encoding="utf-8"
+    )
+
+    assert environment_value("TEXT_RELAY_TEST_KEY") == "a=b # c"
+    assert os.environ["TEXT_RELAY_TEST_KEY"] == "a=b # c"
 
 
 def test_settings_select_local_ip_from_dotenv_cidr(tmp_path, local_interfaces) -> None:

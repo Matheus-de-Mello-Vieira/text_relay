@@ -10,6 +10,7 @@ import socket
 import tomllib
 
 import psutil
+from dotenv import load_dotenv
 
 
 DEFAULT_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -37,23 +38,18 @@ class Settings:
     @classmethod
     def from_environment(cls) -> Settings:
         """Create settings from environment variables and a local dotenv file."""
-        dotenv_values = _read_dotenv(Path.cwd() / ".env")
+        _load_dotenv()
         return cls(
-            host=_bind_host(dotenv_values, cls.host),
-            port=_positive_int("PORT", dotenv_values, cls.port),
-            max_upload_size=_positive_int(
-                "MAX_UPLOAD_SIZE", dotenv_values, cls.max_upload_size
-            ),
-            max_result_history=_positive_int(
-                "MAX_RESULT_HISTORY", dotenv_values, cls.max_result_history
-            ),
+            host=_bind_host(cls.host),
+            port=_positive_int("PORT", cls.port),
+            max_upload_size=_positive_int("MAX_UPLOAD_SIZE", cls.max_upload_size),
+            max_result_history=_positive_int("MAX_RESULT_HISTORY", cls.max_result_history),
             long_poll_timeout_seconds=_positive_float(
                 "LONG_POLL_TIMEOUT_SECONDS",
-                dotenv_values,
                 cls.long_poll_timeout_seconds,
             ),
-            ocr_workers=_positive_int("OCR_WORKERS", dotenv_values, cls.ocr_workers),
-            ocr_retries=_non_negative_int("OCR_RETRIES", dotenv_values, cls.ocr_retries),
+            ocr_workers=_positive_int("OCR_WORKERS", cls.ocr_workers),
+            ocr_retries=_non_negative_int("OCR_RETRIES", cls.ocr_retries),
         )
 
 
@@ -146,14 +142,14 @@ def _profile_from_mapping(profile_id: object, raw_profile: object) -> OCRProfile
     )
 
 
-def _setting(name: str, dotenv_values: dict[str, str], default: str) -> str:
-    return os.getenv(name, dotenv_values.get(name, default))
+def _load_dotenv() -> None:
+    load_dotenv(Path.cwd() / ".env", override=False)
 
 
-def _bind_host(dotenv_values: dict[str, str], default: str) -> str:
-    cidr = _optional_setting("HOST_CIDR", dotenv_values)
+def _bind_host(default: str) -> str:
+    cidr = _optional_setting("HOST_CIDR")
     if cidr is None:
-        return _setting("HOST", dotenv_values, default)
+        return os.getenv("HOST", default)
 
     try:
         if "/" not in cidr:
@@ -173,10 +169,8 @@ def _bind_host(dotenv_values: dict[str, str], default: str) -> str:
     raise ValueError(f"No local IP address matches HOST_CIDR={cidr}")
 
 
-def _positive_int(name: str, dotenv_values: dict[str, str], default: int) -> int:
-    value = _setting(name, dotenv_values, str(default))
-    if value is None:
-        return default
+def _positive_int(name: str, default: int) -> int:
+    value = os.getenv(name, str(default))
     try:
         parsed = int(value)
     except ValueError as error:
@@ -188,8 +182,8 @@ def _positive_int(name: str, dotenv_values: dict[str, str], default: int) -> int
     return parsed
 
 
-def _non_negative_int(name: str, dotenv_values: dict[str, str], default: int) -> int:
-    value = _setting(name, dotenv_values, str(default))
+def _non_negative_int(name: str, default: int) -> int:
+    value = os.getenv(name, str(default))
     try:
         parsed = int(value)
     except ValueError as error:
@@ -199,30 +193,27 @@ def _non_negative_int(name: str, dotenv_values: dict[str, str], default: int) ->
     return parsed
 
 
-def _choice(
-    name: str, dotenv_values: dict[str, str], default: str, choices: set[str]
-) -> str:
-    value = _setting(name, dotenv_values, default).lower()
+def _choice(name: str, default: str, choices: set[str]) -> str:
+    value = os.getenv(name, default).lower()
     if value not in choices:
         expected = ", ".join(sorted(choices))
         raise ValueError(f"{name} must be one of: {expected}")
     return value
 
 
-def _optional_setting(name: str, dotenv_values: dict[str, str]) -> str | None:
-    value = os.getenv(name, dotenv_values.get(name))
+def _optional_setting(name: str) -> str | None:
+    value = os.getenv(name)
     return value if value else None
 
 
 def environment_value(name: str) -> str | None:
-    """Return an environment value, allowing the local dotenv file as fallback."""
-    return _optional_setting(name, _read_dotenv(Path.cwd() / ".env"))
+    """Return an environment value after loading the local dotenv file."""
+    _load_dotenv()
+    return _optional_setting(name)
 
 
-def _positive_float(
-    name: str, dotenv_values: dict[str, str], default: float
-) -> float:
-    value = _setting(name, dotenv_values, str(default))
+def _positive_float(name: str, default: float) -> float:
+    value = os.getenv(name, str(default))
     try:
         parsed = float(value)
     except ValueError as error:
@@ -232,18 +223,3 @@ def _positive_float(
         message = f"{name} must be a positive number"
         raise ValueError(message)
     return parsed
-
-
-def _read_dotenv(path: Path) -> dict[str, str]:
-    """Read simple KEY=value entries without overriding process environment."""
-    if not path.is_file():
-        return {}
-
-    values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        name, value = stripped.split("=", maxsplit=1)
-        values[name.strip()] = value.strip().strip("'").strip('"')
-    return values
