@@ -12,12 +12,18 @@ from text_relay.ocr import OCRExecutionError
 
 LOGGER = logging.getLogger(__name__)
 
-TRANSCRIPTION_PROMPT = """Transcribe all legible printed text in this image verbatim.
+TRANSCRIPTION_PROMPT = """Transcribe all legible printed text in this image and format the result as Markdown.
 
 Rules:
 - Preserve the original wording.
 - Preserve capitalization and punctuation.
-- Preserve paragraph boundaries and bullet structure where possible.
+- Preserve paragraph boundaries and the document's structure.
+- Format headings with Markdown heading markers (#, ##, etc.).
+- Format unordered list items with a hyphen and a space (-), not a bullet character.
+- Format ordered lists as numbered Markdown list items.
+- Format tabular content as a Markdown table when the rows and columns are clear.
+- Use Markdown emphasis only when the source clearly indicates emphasis.
+- Do not add Markdown fences around the result.
 - Do not summarize.
 - Do not rewrite.
 - Do not correct grammar or spelling.

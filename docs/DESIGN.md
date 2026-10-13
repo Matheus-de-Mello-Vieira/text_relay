@@ -116,7 +116,8 @@ Two concrete strategies are intentionally supported:
 - `TesseractOCRStrategy`: writes a temporary validated image, calls Tesseract
   without a shell, and removes the temporary file.
 - `OpenAIOCRStrategy`: uses the official asynchronous OpenAI SDK Responses API,
-  sends a base64 data URL, and asks for faithful transcription.
+  sends a base64 data URL, and asks for faithful transcription formatted as
+  Markdown (including Markdown headings, hyphen bullets, and tables where clear).
 
 Tesseract is the local strategy.
 

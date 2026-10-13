@@ -115,7 +115,9 @@ This mode sends the uploaded image to the OpenAI API. It requires network
 access and incurs API usage cost, but is generally more robust to photographed
 pages with curvature, shadows, perspective, or complex visual conditions. The
 API key remains on the server; it is never sent to the browser or returned by
-the API. Do not put a real key in source control.
+the API. Extracted content is formatted as Markdown, including `-` list items,
+Markdown headings, and tables when the image clearly contains tabular data. Do
+not put a real key in source control.
 
 Only the selected provider is initialized: Tesseract mode does not require an
 OpenAI key, and OpenAI mode does not require a Tesseract installation.
