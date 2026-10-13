@@ -36,8 +36,15 @@
     <div id="crop-dialog" class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-title" hidden>
       <div class="crop-dialog-backdrop"></div>
       <section class="crop-dialog-content">
-        <div class="crop-dialog-header"><div><h2 id="crop-title">Crop image</h2><p>Drag the image or crop handles to select the text.</p></div></div>
+        <div class="crop-dialog-header"><div><h2 id="crop-title">Crop and rotate image</h2><p>Adjust the angle, then drag the crop handles to select the text.</p></div></div>
         <div id="cropper-container" class="cropper-container" aria-label="Image crop area"></div>
+        <div class="rotation-controls" role="group" aria-label="Image rotation">
+          <span class="rotation-label">Straighten</span>
+          <button id="rotate-left" class="secondary-button" type="button" disabled aria-label="Rotate 1 degree counterclockwise">−1°</button>
+          <output id="rotation-angle" aria-live="polite">0°</output>
+          <button id="rotate-right" class="secondary-button" type="button" disabled aria-label="Rotate 1 degree clockwise">+1°</button>
+          <button id="reset-rotation" class="secondary-button" type="button" disabled>Reset</button>
+        </div>
         <div class="crop-actions"><button id="cancel-crop" class="secondary-button" type="button">Cancel</button><button id="confirm-crop" type="button">Confirm crop</button></div>
       </section>
     </div>
@@ -72,6 +79,10 @@
     const cropperContainer = document.querySelector("#cropper-container");
     const confirmCropButton = document.querySelector("#confirm-crop");
     const cancelCropButton = document.querySelector("#cancel-crop");
+    const rotateLeftButton = document.querySelector("#rotate-left");
+    const rotateRightButton = document.querySelector("#rotate-right");
+    const resetRotationButton = document.querySelector("#reset-rotation");
+    const rotationAngle = document.querySelector("#rotation-angle");
     const RESULTS_REQUEST_TIMEOUT_MS = 40_000;
     let lastResults = "";
     let cursor = null;
@@ -80,6 +91,7 @@
     let cropObjectUrl = null;
     let cropSourceFile = null;
     let focusBeforeCrop = null;
+    let rotationDegrees = 0;
     const profileLabels = new Map();
 
     function setStatus(message, state = "") {
@@ -119,11 +131,24 @@
       if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
       cropObjectUrl = null;
       cropSourceFile = null;
+      rotationDegrees = 0;
+      rotationAngle.value = "0°";
+      rotateLeftButton.disabled = true;
+      rotateRightButton.disabled = true;
+      resetRotationButton.disabled = true;
       if (discard) {
         setInputFile();
         updateSelectedFile();
         imageInput.focus();
       }
+    }
+    function rotateImage(degrees) {
+      const cropperImage = cropper?.getCropperImage();
+      if (!cropperImage) return;
+      cropperImage.$rotate(`${degrees}deg`);
+      rotationDegrees += degrees;
+      rotationAngle.value = `${rotationDegrees}°`;
+      resetRotationButton.disabled = rotationDegrees === 0;
     }
     function canvasToBlob(canvas, type) {
       return new Promise((resolve, reject) => canvas.toBlob(
@@ -149,6 +174,10 @@
       image.addEventListener("load", () => {
         if (cropDialog.hidden || cropSourceFile !== file) return;
         cropper = new Cropper(image, { container: cropperContainer });
+        const cropperImage = cropper.getCropperImage();
+        cropperImage.rotatable = true;
+        rotateLeftButton.disabled = false;
+        rotateRightButton.disabled = false;
         confirmCropButton.focus();
       }, { once: true });
       image.addEventListener("error", () => {
@@ -304,6 +333,9 @@
       imageInput.focus();
     });
     cancelCropButton.addEventListener("click", () => closeCropDialog({ discard: true }));
+    rotateLeftButton.addEventListener("click", () => rotateImage(-1));
+    rotateRightButton.addEventListener("click", () => rotateImage(1));
+    resetRotationButton.addEventListener("click", () => rotateImage(-rotationDegrees));
     cropDialog.querySelector(".crop-dialog-backdrop").addEventListener("click", () => closeCropDialog({ discard: true }));
     cropDialog.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
