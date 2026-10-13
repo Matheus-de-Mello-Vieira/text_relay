@@ -174,7 +174,7 @@ def test_duplicate_image_is_rejected_without_running_ocr_again() -> None:
     assert original.status_code == 202
     assert (duplicate.status_code, duplicate.json()) == (
         409,
-        {"detail": "This image has already been submitted."},
+        {"detail": "This image has already been submitted with the active OCR profile."},
     )
     assert strategy.calls == [(b"image", "image/png")]
     completed = wait_for_job(client, original.json()["id"])
@@ -187,6 +187,28 @@ def test_invalid_and_empty_uploads_are_rejected() -> None:
     empty = client.post("/api/ocr", files={"file": ("photo.png", b"", "image/png")})
     assert (invalid.status_code, invalid.json()["detail"]) == (415, "Unsupported image type.")
     assert (empty.status_code, empty.json()["detail"]) == (400, "Image upload is empty.")
+
+
+def test_ocr_profiles_are_listed_and_can_be_activated() -> None:
+    client = make_client(FakeOCRStrategy())
+
+    listed = client.get("/api/ocr-profiles")
+    assert listed.status_code == 200
+    assert listed.json()["active_profile"] == "local"
+    assert listed.json()["profiles"][0] == {
+        "id": "local", "label": "Local Tesseract", "provider": "tesseract"
+    }
+
+    changed = client.put("/api/ocr-profiles/active", json={"profile_id": "local"})
+    assert changed.status_code == 200
+    assert changed.json()["active_profile"] == "local"
+
+
+def test_unknown_ocr_profile_is_rejected() -> None:
+    response = make_client(FakeOCRStrategy()).put(
+        "/api/ocr-profiles/active", json={"profile_id": "unknown"}
+    )
+    assert (response.status_code, response.json()) == (404, {"detail": "OCR profile was not found."})
 
 
 def test_oversized_upload_is_rejected() -> None:

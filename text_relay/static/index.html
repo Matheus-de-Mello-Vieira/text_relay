@@ -28,6 +28,8 @@
     h2 { margin-bottom: .2rem; font-size: 1rem; letter-spacing: -.015em; }
     .panel-heading p { margin: 0; color: #758097; font-size: .87rem; }
     input { font: inherit; }
+    select { width: 100%; min-height: 2.8rem; padding: 0 .75rem; border: 1px solid #bdc5df; border-radius: .65rem; background: #fbfcff; color: inherit; font: inherit; }
+    .profile-control { margin-bottom: 1rem; } .profile-control label { display: block; margin-bottom: .35rem; color: #52607a; font-size: .84rem; font-weight: 700; } .profile-control p { margin: .35rem 0 0; color: #79849a; font-size: .78rem; }
     .file-picker { display: grid; min-height: 8.5rem; place-items: center; border: 1.5px dashed #bdc5df; border-radius: .85rem; background: #fbfcff; cursor: pointer; text-align: center; transition: border-color .18s, background .18s; }
     .file-picker:hover, .file-picker:focus-within { border-color: #6574d2; background: #f5f6ff; }
     .file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
@@ -62,7 +64,7 @@
     pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
     .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
     @media (max-width: 480px) { main { width: min(100% - 1.4rem, 780px); padding-top: 1.5rem; } h1 { margin-top: 1.5rem; } .upload-panel { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; gap: .55rem; } }
-    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } .retry-button { border-color: #75434a; background: #29202d; color: #ffb9bf; } .retry-button:hover:not(:disabled) { background: #3a2632; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
+    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker, select { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span, .profile-control label, .profile-control p { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } .retry-button { border-color: #75434a; background: #29202d; color: #ffb9bf; } .retry-button:hover:not(:disabled) { background: #3a2632; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
   </style>
 </head>
 <body>
@@ -72,6 +74,7 @@
     <p class="intro">Take a picture of printed text or choose an existing image. Your transcription appears here in moments, ready to copy.</p>
     <form id="upload-form" class="upload-panel">
       <div class="panel-heading"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 16 3-3 2.5 2.5L15 12l3 4M8 5l1.2-2h5.6L16 5"/></svg></span><div><h2>Choose an image</h2><p>JPG, PNG, or WebP up to 10 MB</p></div></div>
+      <div class="profile-control"><label for="ocr-profile">OCR profile</label><select id="ocr-profile" disabled></select><p>This setting applies to everyone using this server.</p></div>
       <label class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/*" capture="environment" required><span class="file-picker-content"><strong>Take a photo or browse files</strong><span>Your image stays on this trusted network</span></span></label>
       <p id="file-name" class="file-name" aria-live="polite"></p>
       <button id="submit" type="submit">Extract text</button>
@@ -96,15 +99,32 @@
     const queue = document.querySelector("#queue");
     const submitted = document.querySelector("#submitted");
     const fileName = document.querySelector("#file-name");
+    const profileSelect = document.querySelector("#ocr-profile");
     const RESULTS_REQUEST_TIMEOUT_MS = 40_000;
     let lastResults = "";
     let cursor = null;
+    let activeProfile = null;
+    const profileLabels = new Map();
 
     function setStatus(message, state = "") {
       status.textContent = message;
       status.className = state;
     }
     function displayTime(value) { return new Date(value).toLocaleString(); }
+    function applyProfiles(payload) {
+      if (payload.profiles) {
+        profileLabels.clear();
+        profileSelect.replaceChildren(...payload.profiles.map((profile) => {
+          profileLabels.set(profile.id, profile.label);
+          return Object.assign(document.createElement("option"), { value: profile.id, textContent: profile.label });
+        }));
+        profileSelect.disabled = false;
+      }
+      if (payload.active_profile) {
+        activeProfile = payload.active_profile;
+        profileSelect.value = activeProfile;
+      }
+    }
     async function copyText(text, button) {
       try {
         await navigator.clipboard.writeText(text);
@@ -143,7 +163,7 @@
       const card = document.createElement("article");
       card.className = "job";
       const details = document.createElement("span");
-      details.textContent = `Submitted ${displayTime(job.created_at)}`;
+      details.textContent = `Submitted ${displayTime(job.created_at)} · ${profileLabels.get(job.profile_id) || job.profile_id}`;
       const label = document.createElement("span");
       label.className = `job-status ${job.status}`;
       label.textContent = job.status;
@@ -186,6 +206,28 @@
       fileName.textContent = file ? `Selected: ${file.name}` : "";
       fileName.classList.toggle("visible", Boolean(file));
     });
+    profileSelect.addEventListener("change", async () => {
+      const previous = activeProfile;
+      profileSelect.disabled = true;
+      try {
+        const response = await fetch("/api/ocr-profiles/active", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile_id: profileSelect.value }) });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not change the OCR profile.");
+        applyProfiles(body);
+        setStatus("OCR profile changed for everyone on this server.", "success");
+      } catch (error) {
+        profileSelect.value = previous;
+        setStatus(error.message || "Could not change the OCR profile.", "error");
+      } finally { profileSelect.disabled = false; }
+    });
+    async function loadProfiles() {
+      try {
+        const response = await fetch("/api/ocr-profiles");
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not load OCR profiles.");
+        applyProfiles(body);
+      } catch (error) { setStatus(error.message || "Could not load OCR profiles.", "error"); }
+    }
     function wait(milliseconds) {
       return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
@@ -217,6 +259,7 @@
             return;
           }
           const items = payload.results;
+          applyProfiles(payload);
           cursor = payload.cursor;
           renderResults(items);
           renderQueue(payload.jobs);
@@ -246,6 +289,7 @@
         submitButton.disabled = false;
       }
     });
+    loadProfiles();
     pollResults();
   </script>
 </body>

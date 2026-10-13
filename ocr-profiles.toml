@@ -1,0 +1,14 @@
+default_profile = "openai"
+
+[profiles.local]
+label = "Local Tesseract"
+provider = "tesseract"
+language = "eng"
+psm = 6
+
+[profiles.openai]
+label = "OpenAI Vision"
+provider = "openai"
+model = "gpt-6-luna"
+image_detail = "high"
+api_key_env = "OPENAI_API_KEY"

@@ -9,12 +9,12 @@ from pathlib import Path
 from types import FrameType
 from typing import Callable
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 import uvicorn
 
-from text_relay.config import Settings
-from text_relay.ocr import OCRStrategy, create_ocr_strategy
+from text_relay.config import OCRProfileCatalog, Settings
+from text_relay.ocr import OCRConfigurationError, OCRProfileManager, OCRStrategy
 from text_relay.queue import OCRWorkItem, OCRWorkQueue
 from text_relay.store import OCRJob, OCRResult, ResultStore
 
@@ -56,6 +56,7 @@ def _job_payload(job: OCRJob) -> dict[str, str | dict[str, str] | None]:
         "created_at": job.created_at.isoformat().replace("+00:00", "Z"),
         "image_checksum": job.image_checksum,
         "status": job.status,
+        "profile_id": job.profile_id,
         "result": _result_payload(job.result) if job.result is not None else None,
     }
 
@@ -63,9 +64,12 @@ def _job_payload(job: OCRJob) -> dict[str, str | dict[str, str] | None]:
 def create_app(
     settings: Settings | None = None, *, ocr_strategy: OCRStrategy | None = None
 ) -> FastAPI:
-    """Create an application using one selected or injected OCR strategy."""
+    """Create an application using the configured OCR profile catalog."""
     resolved_settings = settings or Settings.from_environment()
-    selected_strategy = ocr_strategy or create_ocr_strategy(resolved_settings)
+    profile_manager = OCRProfileManager(
+        OCRProfileCatalog.from_file(Path.cwd() / "ocr-profiles.toml")
+    )
+    injected_profile_id = profile_manager.active_profile_id if ocr_strategy is not None else None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -76,20 +80,27 @@ def create_app(
             app.state.is_shutting_down = True
             app.state.store.interrupt_waiters()
             await app.state.ocr_queue.close()
-            close = getattr(selected_strategy, "aclose", None)
-            if close is not None:
-                await close()
+            if ocr_strategy is not None:
+                close = getattr(ocr_strategy, "aclose", None)
+                if close is not None:
+                    await close()
+            await profile_manager.aclose()
 
     app = FastAPI(title="TextRelay", lifespan=lifespan)
     app.state.store = ResultStore(resolved_settings.max_result_history)
-    app.state.ocr_strategy = selected_strategy
+    app.state.ocr_profiles = profile_manager
     app.state.ocr_queue = OCRWorkQueue(
-        selected_strategy,
         app.state.store,
         resolved_settings.ocr_workers,
         resolved_settings.ocr_retries,
     )
     app.state.is_shutting_down = False
+
+    def strategy_for(profile_id: str) -> OCRStrategy:
+        if profile_id == injected_profile_id:
+            assert ocr_strategy is not None
+            return ocr_strategy
+        return profile_manager.strategy_for(profile_id)
 
     @app.get("/", response_class=FileResponse)
     async def index() -> FileResponse:
@@ -118,10 +129,29 @@ def create_app(
             "results": [_result_payload(result) for result in app.state.store.recent()],
             "jobs": [_job_payload(job) for job in app.state.store.jobs()],
             "cursor": app.state.store.change_id(),
+            "active_profile": profile_manager.active_profile_id,
         }
         if app.state.is_shutting_down:
             payload["server_status"] = "stopping"
         return payload
+
+    @app.get("/api/ocr-profiles")
+    async def ocr_profiles() -> dict[str, object]:
+        return profile_manager.payload()
+
+    @app.put("/api/ocr-profiles/active")
+    async def activate_ocr_profile(payload: dict[str, str] = Body(...)) -> dict[str, object]:
+        profile_id = payload.get("profile_id")
+        if not profile_id:
+            raise HTTPException(status_code=422, detail="profile_id is required.")
+        try:
+            profile_manager.activate(profile_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="OCR profile was not found.") from None
+        except OCRConfigurationError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        app.state.store.publish_change()
+        return profile_manager.payload()
 
     @app.post("/api/ocr", status_code=202)
     async def perform_ocr(
@@ -147,13 +177,15 @@ def create_app(
             image = b"".join(chunks)
             image_checksum = sha256(image).hexdigest()
 
-            job = app.state.store.enqueue(image_checksum, image, content_type)
+            profile_id = profile_manager.active_profile_id
+            strategy = strategy_for(profile_id)
+            job = app.state.store.enqueue(image_checksum, image, content_type, profile_id)
             if job is None:
                 raise HTTPException(
                     status_code=409,
-                    detail="This image has already been submitted.",
+                    detail="This image has already been submitted with the active OCR profile.",
                 )
-            await app.state.ocr_queue.submit(OCRWorkItem(job.id, image, content_type))
+            await app.state.ocr_queue.submit(OCRWorkItem(job.id, image, content_type, strategy))
             return _job_payload(job)
         finally:
             await file.close()
@@ -167,7 +199,7 @@ def create_app(
                 detail="Only retained failed extractions can be retried.",
             )
         await app.state.ocr_queue.submit(
-            OCRWorkItem(job.id, job.image, job.content_type)
+            OCRWorkItem(job.id, job.image, job.content_type, strategy_for(job.profile_id))
         )
         return _job_payload(job)
 

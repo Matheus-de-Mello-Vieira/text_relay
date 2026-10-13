@@ -1,4 +1,4 @@
-"""Application configuration read from environment variables."""
+"""Application and OCR profile configuration."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from ipaddress import ip_address, ip_network
 import os
 from pathlib import Path
 import socket
+import tomllib
 
 import psutil
 
@@ -26,12 +27,6 @@ class Settings:
 
     host: str = "0.0.0.0"
     port: int = 8000
-    ocr_language: str = "eng"
-    ocr_psm: int = 6
-    ocr_provider: str = "tesseract"
-    openai_ocr_model: str = "gpt-6-luna"
-    openai_image_detail: str = "high"
-    openai_api_key: str | None = None
     max_upload_size: int = DEFAULT_MAX_UPLOAD_SIZE
     max_result_history: int = DEFAULT_MAX_RESULT_HISTORY
     long_poll_timeout_seconds: float = DEFAULT_LONG_POLL_TIMEOUT_SECONDS
@@ -45,17 +40,6 @@ class Settings:
         return cls(
             host=_bind_host(dotenv_values, cls.host),
             port=_positive_int("PORT", dotenv_values, cls.port),
-            ocr_language=_setting("OCR_LANGUAGE", dotenv_values, cls.ocr_language),
-            ocr_psm=_positive_int("OCR_PSM", dotenv_values, cls.ocr_psm),
-            ocr_provider=_choice("OCR_PROVIDER", dotenv_values, cls.ocr_provider, OCR_PROVIDERS),
-            openai_ocr_model=_setting("OPENAI_OCR_MODEL", dotenv_values, cls.openai_ocr_model),
-            openai_image_detail=_choice(
-                "OPENAI_IMAGE_DETAIL",
-                dotenv_values,
-                cls.openai_image_detail,
-                OPENAI_IMAGE_DETAILS,
-            ),
-            openai_api_key=_optional_setting("OPENAI_API_KEY", dotenv_values),
             max_upload_size=_positive_int(
                 "MAX_UPLOAD_SIZE", dotenv_values, cls.max_upload_size
             ),
@@ -70,6 +54,85 @@ class Settings:
             ocr_workers=_positive_int("OCR_WORKERS", dotenv_values, cls.ocr_workers),
             ocr_retries=_non_negative_int("OCR_RETRIES", dotenv_values, cls.ocr_retries),
         )
+
+
+@dataclass(frozen=True)
+class OCRProfile:
+    """One named OCR provider configuration."""
+
+    id: str
+    label: str
+    provider: str
+    language: str | None = None
+    psm: int | None = None
+    model: str | None = None
+    image_detail: str | None = None
+    api_key_env: str | None = None
+
+    def public_payload(self) -> dict[str, str]:
+        return {"id": self.id, "label": self.label, "provider": self.provider}
+
+
+@dataclass(frozen=True)
+class OCRProfileCatalog:
+    """Validated OCR profiles and the profile selected after startup."""
+
+    default_profile: str
+    profiles: dict[str, OCRProfile]
+
+    @classmethod
+    def from_file(cls, path: Path) -> OCRProfileCatalog:
+        if not path.is_file():
+            raise ValueError(f"OCR profile file is required: {path}")
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as error:
+            raise ValueError(f"OCR profile file is invalid TOML: {path}") from error
+        default_profile = data.get("default_profile")
+        raw_profiles = data.get("profiles")
+        if not isinstance(default_profile, str) or not default_profile:
+            raise ValueError("OCR profile file must define default_profile")
+        if not isinstance(raw_profiles, dict) or not raw_profiles:
+            raise ValueError("OCR profile file must define at least one profile")
+        profiles = {
+            profile_id: _profile_from_mapping(profile_id, raw_profile)
+            for profile_id, raw_profile in raw_profiles.items()
+        }
+        if default_profile not in profiles:
+            raise ValueError("default_profile must name a configured profile")
+        return cls(default_profile=default_profile, profiles=profiles)
+
+
+def _profile_from_mapping(profile_id: object, raw_profile: object) -> OCRProfile:
+    if not isinstance(profile_id, str) or not profile_id:
+        raise ValueError("OCR profile IDs must be non-empty strings")
+    if not isinstance(raw_profile, dict):
+        raise ValueError(f"OCR profile {profile_id!r} must be a table")
+    provider = raw_profile.get("provider")
+    if not isinstance(provider, str) or provider.lower() not in OCR_PROVIDERS:
+        raise ValueError(f"OCR profile {profile_id!r} has an unsupported provider")
+    provider = provider.lower()
+    label = raw_profile.get("label", profile_id)
+    if not isinstance(label, str) or not label:
+        raise ValueError(f"OCR profile {profile_id!r} label must be a non-empty string")
+    if provider == "tesseract":
+        language = raw_profile.get("language", "eng")
+        psm = raw_profile.get("psm", 6)
+        if not isinstance(language, str) or not language:
+            raise ValueError(f"OCR profile {profile_id!r} language must be a non-empty string")
+        if not isinstance(psm, int) or psm <= 0:
+            raise ValueError(f"OCR profile {profile_id!r} psm must be a positive integer")
+        return OCRProfile(profile_id, label, provider, language=language, psm=psm)
+    model = raw_profile.get("model", "gpt-6-luna")
+    image_detail = raw_profile.get("image_detail", "high")
+    api_key_env = raw_profile.get("api_key_env")
+    if not isinstance(model, str) or not model:
+        raise ValueError(f"OCR profile {profile_id!r} model must be a non-empty string")
+    if not isinstance(image_detail, str) or image_detail not in OPENAI_IMAGE_DETAILS:
+        raise ValueError(f"OCR profile {profile_id!r} image_detail is invalid")
+    if not isinstance(api_key_env, str) or not api_key_env:
+        raise ValueError(f"OCR profile {profile_id!r} api_key_env must be a non-empty string")
+    return OCRProfile(profile_id, label, provider, model=model, image_detail=image_detail, api_key_env=api_key_env)
 
 
 def _setting(name: str, dotenv_values: dict[str, str], default: str) -> str:
@@ -138,6 +201,11 @@ def _choice(
 def _optional_setting(name: str, dotenv_values: dict[str, str]) -> str | None:
     value = os.getenv(name, dotenv_values.get(name))
     return value if value else None
+
+
+def environment_value(name: str) -> str | None:
+    """Return an environment value, allowing the local dotenv file as fallback."""
+    return _optional_setting(name, _read_dotenv(Path.cwd() / ".env"))
 
 
 def _positive_float(

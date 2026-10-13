@@ -108,8 +108,9 @@ Avoid introducing additional libraries unless they solve a concrete requirement.
 
 The application owns a small `OCRStrategy` protocol with one asynchronous
 operation: it accepts validated image bytes and their MIME type, then returns
-transcribed text. Strategy construction occurs once in the application factory
-from validated settings; request handlers do not branch by provider.
+transcribed text. Strategies are created from validated named profiles. The
+server has one active profile for new uploads; each queued job retains its
+selected profile and strategy even if the active profile later changes.
 
 Two concrete strategies are intentionally supported:
 
@@ -612,29 +613,27 @@ Server logs should retain enough information to diagnose failures.
 
 Configuration should stay minimal.
 
-Candidate settings:
+Server settings:
 
 ```text
 HOST
 PORT
-OCR_PROVIDER
-OCR_LANGUAGE
-OCR_PSM
-OPENAI_OCR_MODEL
-OPENAI_IMAGE_DETAIL
 MAX_UPLOAD_SIZE
 MAX_RESULT_HISTORY
 ```
 
-Defaults should work without environment configuration.
+OCR profiles are required in `ocr-profiles.toml`. The file selects a
+`default_profile` and may define Tesseract profiles (`language`, `psm`) and
+OpenAI profiles (`model`, `image_detail`, `api_key_env`). API keys remain in
+the process environment or `.env`, never in the profile file. The web UI can
+switch the in-memory active profile for all clients; restart returns to the
+TOML default.
 
 Suggested defaults:
 
 ```text
 HOST=0.0.0.0
 PORT=8000
-OCR_LANGUAGE=eng
-OCR_PSM=6
 MAX_UPLOAD_SIZE=10 MiB
 MAX_RESULT_HISTORY=20
 ```

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from openai import APIError
 
-from text_relay.config import Settings
+from text_relay.config import OCRProfile
 from text_relay.ocr import OCRConfigurationError, OCRExecutionError, create_ocr_strategy
 from text_relay.openai_ocr import OpenAIOCRStrategy, TRANSCRIPTION_PROMPT
 from text_relay.tesseract_ocr import TesseractOCRStrategy, TesseractUnavailable, _extract_text
@@ -51,19 +51,31 @@ def test_tesseract_removes_temporary_file() -> None:
 
 
 def test_strategy_selection_is_explicit() -> None:
-    assert isinstance(create_ocr_strategy(Settings(ocr_provider="tesseract")), TesseractOCRStrategy)
-    strategy = create_ocr_strategy(Settings(ocr_provider="openai", openai_api_key="test-key"))
+    assert isinstance(
+        create_ocr_strategy(OCRProfile("local", "Local", "tesseract", language="eng", psm=6)),
+        TesseractOCRStrategy,
+    )
+    with patch("text_relay.ocr.environment_value", return_value="test-key"):
+        strategy = create_ocr_strategy(
+            OCRProfile(
+                "cloud", "Cloud", "openai", model="model", image_detail="high", api_key_env="TEST_KEY"
+            )
+        )
     assert isinstance(strategy, OpenAIOCRStrategy)
 
 
 def test_invalid_strategy_selection_is_controlled() -> None:
-    with pytest.raises(OCRConfigurationError, match="Unsupported OCR_PROVIDER"):
-        create_ocr_strategy(Settings(ocr_provider="unknown"))
+    with pytest.raises(OCRConfigurationError, match="Unsupported OCR provider"):
+        create_ocr_strategy(OCRProfile("unknown", "Unknown", "other"))
 
 
 def test_openai_selection_requires_a_server_side_key() -> None:
-    with pytest.raises(OCRConfigurationError, match="OPENAI_API_KEY"):
-        create_ocr_strategy(Settings(ocr_provider="openai"))
+    profile = OCRProfile(
+        "cloud", "Cloud", "openai", model="model", image_detail="high", api_key_env="OPENAI_API_KEY"
+    )
+    with patch("text_relay.ocr.environment_value", return_value=None):
+        with pytest.raises(OCRConfigurationError, match="OPENAI_API_KEY"):
+            create_ocr_strategy(profile)
 
 
 def test_openai_sends_a_data_url_and_returns_transcription() -> None:

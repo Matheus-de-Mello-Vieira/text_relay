@@ -20,15 +20,15 @@ class OCRWorkItem:
     job_id: str
     image: bytes
     content_type: str
+    strategy: OCRStrategy
 
 
 class OCRWorkQueue:
     """Runs queued OCR jobs with a fixed number of asynchronous workers."""
 
     def __init__(
-        self, strategy: OCRStrategy, store: ResultStore, worker_count: int, retry_count: int = 0
+        self, store: ResultStore, worker_count: int, retry_count: int = 0
     ) -> None:
-        self._strategy = strategy
         self._store = store
         self._worker_count = worker_count
         self._retry_count = retry_count
@@ -65,7 +65,7 @@ class OCRWorkQueue:
                 self._store.mark_processing(item.job_id)
                 for attempt in range(self._retry_count + 1):
                     try:
-                        text = await self._strategy.extract_text(item.image, item.content_type)
+                        text = await item.strategy.extract_text(item.image, item.content_type)
                     except OCRError as error:
                         LOGGER.warning("OCR attempt %s failed: %s", attempt + 1, error)
                     except Exception:

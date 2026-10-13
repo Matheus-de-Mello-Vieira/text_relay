@@ -2,7 +2,7 @@
 
 TextRelay is a small, local-network OCR relay. Open it on a phone, take or
 select a JPEG, PNG, or WebP image, and the computer transcribes it with the
-configured OCR provider.
+selected OCR profile.
 The recognized text is immediately returned to the phone and appears in open
 computer browsers without reloading.
 
@@ -53,18 +53,13 @@ other. Both devices normally need to be on the same trusted network.
 
 ## Configuration
 
-All settings are optional environment variables:
+Server settings are optional environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `0.0.0.0` | Bind host |
 | `HOST_CIDR` | unset | Select a local IP in this CIDR block; overrides `HOST` |
 | `PORT` | `8000` | Bind port |
-| `OCR_PROVIDER` | `tesseract` | OCR provider: `tesseract` or `openai` |
-| `OCR_LANGUAGE` | `eng` | Tesseract language |
-| `OCR_PSM` | `6` | Tesseract page segmentation mode |
-| `OPENAI_OCR_MODEL` | `gpt-6-luna` | OpenAI vision model for OCR mode |
-| `OPENAI_IMAGE_DETAIL` | `high` | OpenAI image detail: `low`, `high`, `original`, or `auto` |
 | `MAX_UPLOAD_SIZE` | `10485760` | Maximum image size in bytes (10 MiB) |
 | `MAX_RESULT_HISTORY` | `20` | Number of recent results retained |
 | `LONG_POLL_TIMEOUT_SECONDS` | `25` | Maximum duration of one results wait |
@@ -91,36 +86,41 @@ An unset or empty `HOST_CIDR` uses `HOST` as before. Process environment values
 take precedence over `.env` values. When bound to a specific IP, use that IP
 instead of `localhost` in both computer and phone browsers.
 
-### Local Tesseract OCR
+### OCR profiles
 
-```bash
-OCR_PROVIDER=tesseract poetry run text-relay
+`ocr-profiles.toml` is required in the directory where you start the server.
+It defines all selectable OCR profiles and their startup default:
+
+```toml
+default_profile = "local"
+
+[profiles.local]
+label = "Local Tesseract"
+provider = "tesseract"
+language = "eng"
+psm = 6
+
+[profiles.openai]
+label = "OpenAI Vision"
+provider = "openai"
+model = "gpt-6-luna"
+image_detail = "high"
+api_key_env = "OPENAI_API_KEY"
 ```
 
-This is the default: it works offline, has no API cost, and requires Tesseract
-on the computer. Photograph quality, page curvature, shadows, and perspective
-can have a larger impact on recognition quality.
+Select a profile in the web interface to change the server-wide setting for
+future uploads. The choice is not persisted: a restart returns to
+`default_profile`. Queued jobs and retries retain the profile selected when
+they were submitted. The same image may be submitted once for each profile.
 
-### OpenAI vision OCR
+For an OpenAI profile, set the named key in the process environment or `.env`:
 
-```bash
-OCR_PROVIDER=openai \
-OPENAI_API_KEY=... \
-OPENAI_OCR_MODEL=gpt-6-luna \
-OPENAI_IMAGE_DETAIL=high \
-poetry run text-relay
+```dotenv
+OPENAI_API_KEY=...
 ```
 
-This mode sends the uploaded image to the OpenAI API. It requires network
-access and incurs API usage cost, but is generally more robust to photographed
-pages with curvature, shadows, perspective, or complex visual conditions. The
-API key remains on the server; it is never sent to the browser or returned by
-the API. Extracted content is formatted as Markdown, including `-` list items,
-Markdown headings, and tables when the image clearly contains tabular data. Do
-not put a real key in source control.
-
-Only the selected provider is initialized: Tesseract mode does not require an
-OpenAI key, and OpenAI mode does not require a Tesseract installation.
+The key remains on the server and is never returned to the browser. Do not put
+real keys in source control.
 
 The OCR history is held only in memory and is cleared when the server restarts.
 Run Uvicorn with a single worker: multiple workers have separate histories.
@@ -128,8 +128,8 @@ Run Uvicorn with a single worker: multiple workers have separate histories.
 Each upload is accepted immediately and enters the shared extraction queue.
 The browser shows whether each queued image is waiting, processing, completed,
 or failed; up to `OCR_WORKERS` extractions run at once. Each retained OCR job
-records the SHA-256 checksum of its uploaded image. Submitting the same bytes
-again shows an error without adding duplicate work.
+records the SHA-256 checksum and profile ID. Submitting the same bytes to the
+same profile again shows an error without adding duplicate work.
 When OCR fails, the server retries up to `OCR_RETRIES` additional times before
 marking the job failed. Clicking Retry on a failed job starts a fresh run with
 the same retry policy.

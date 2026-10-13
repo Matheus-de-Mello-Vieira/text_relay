@@ -89,12 +89,13 @@ Unsupported formats must produce a controlled error.
 
 ## FR-006 — OCR strategies
 
-OCR must use one explicitly configured strategy: `tesseract` for local OCR
-using Tesseract installed on the computer, or `openai` for remote vision OCR
-using the OpenAI Responses API. The HTTP/API layer must depend only on the
-common strategy operation. Changing providers must not require HTTP/API code
-changes. Invalid provider configuration must fail clearly, and the unselected
-provider must not be initialized or validated.
+OCR profiles must configure `tesseract` for local OCR using Tesseract installed
+on the computer or `openai` for remote vision OCR using the OpenAI Responses
+API. The HTTP/API layer must depend only on the common strategy operation. The
+web interface must select the active profile for future submissions, while
+queued work retains the profile selected at submission. Invalid default profile
+configuration must fail clearly; unavailable non-default profiles must be
+rejected when selected.
 
 The local Tesseract strategy configuration must use:
 
@@ -378,26 +379,25 @@ The following values should be configurable without changing application logic:
 ```text
 host
 port
-OCR language
-Tesseract page segmentation mode
-OCR provider
-OpenAI OCR model
-OpenAI image detail
+OCR profile catalog and default profile
+Tesseract language and page segmentation mode per profile
+OpenAI model, image detail, and environment-variable credential per profile
 maximum upload size
 maximum result history
 ```
 
-Reasonable defaults must allow the application to run without explicit configuration.
+The profile catalog must be supplied as `ocr-profiles.toml`; server settings
+retain their existing reasonable defaults.
 
 Suggested values:
 
 ```text
 host = 0.0.0.0
 port = 8000
-OCR language = eng
-OCR PSM = 6
-OCR provider = tesseract
-OpenAI OCR model = gpt-6-luna
+default profile = local Tesseract profile
+Tesseract language = eng
+Tesseract PSM = 6
+OpenAI model = gpt-6-luna
 OpenAI image detail = high
 maximum upload size = 10 MiB
 maximum history = 20

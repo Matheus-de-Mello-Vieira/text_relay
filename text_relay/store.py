@@ -30,6 +30,7 @@ class OCRJob:
     result: OCRResult | None = None
     image: bytes = b""
     content_type: str = ""
+    profile_id: str = ""
 
 
 class ResultStore:
@@ -40,7 +41,7 @@ class ResultStore:
             raise ValueError("maximum_size must be positive")
         self._results: deque[OCRResult] = deque(maxlen=maximum_size)
         self._jobs: deque[OCRJob] = deque()
-        self._jobs_by_checksum: dict[str, OCRJob] = {}
+        self._jobs_by_checksum: dict[tuple[str, str], OCRJob] = {}
         self._changed = Condition()
         self._waiters_interrupted = False
         self._change_id: str | None = None
@@ -59,11 +60,16 @@ class ResultStore:
         return result
 
     def enqueue(
-        self, image_checksum: str, image: bytes = b"", content_type: str = ""
+        self,
+        image_checksum: str,
+        image: bytes = b"",
+        content_type: str = "",
+        profile_id: str = "",
     ) -> OCRJob | None:
         """Reserve an image for OCR unless it is already queued or retained."""
         with self._changed:
-            if image_checksum in self._jobs_by_checksum:
+            key = (image_checksum, profile_id)
+            if key in self._jobs_by_checksum:
                 return None
             job = OCRJob(
                 id=str(uuid4()),
@@ -72,9 +78,10 @@ class ResultStore:
                 status="queued",
                 image=image,
                 content_type=content_type,
+                profile_id=profile_id,
             )
             self._jobs.appendleft(job)
-            self._jobs_by_checksum[image_checksum] = job
+            self._jobs_by_checksum[key] = job
             self._publish_change()
             return job
 
@@ -148,6 +155,11 @@ class ResultStore:
             self._waiters_interrupted = True
             self._changed.notify_all()
 
+    def publish_change(self) -> None:
+        """Wake long-polling clients after a non-job visible state change."""
+        with self._changed:
+            self._publish_change()
+
     def fail_unfinished_jobs(self) -> None:
         """Make queue shutdown visible to clients instead of leaving stale work."""
         with self._changed:
@@ -177,10 +189,11 @@ class ResultStore:
             result=result,
             image=job.image,
             content_type=job.content_type,
+            profile_id=job.profile_id,
         )
         self._jobs.remove(job)
         self._jobs.appendleft(replacement)
-        self._jobs_by_checksum[job.image_checksum] = replacement
+        self._jobs_by_checksum[(job.image_checksum, job.profile_id)] = replacement
         if notify:
             self._publish_change()
             self._trim_finished_jobs()
@@ -197,4 +210,4 @@ class ResultStore:
         finished = [job for job in self._jobs if job.status in {"completed", "failed"}]
         for job in finished[self._results.maxlen :]:
             self._jobs.remove(job)
-            self._jobs_by_checksum.pop(job.image_checksum, None)
+            self._jobs_by_checksum.pop((job.image_checksum, job.profile_id), None)
