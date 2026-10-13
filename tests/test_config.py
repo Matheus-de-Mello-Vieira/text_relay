@@ -66,11 +66,12 @@ def test_profile_catalog_rejects_invalid_provider(tmp_path) -> None:
         OCRProfileCatalog.from_file(path)
 
 
-def test_profile_catalog_reads_tesseract_and_openai_profiles(tmp_path) -> None:
+def test_profile_catalog_reads_tesseract_openai_and_gemini_profiles(tmp_path) -> None:
     path = tmp_path / "ocr-profiles.toml"
     path.write_text(
         'default_profile = "local"\n[profiles.local]\nprovider = "tesseract"\n'
         '[profiles.cloud]\nlabel = "Cloud"\nprovider = "openai"\napi_key_env = "TEST_KEY"\n'
+        '[profiles.gemini]\nlabel = "Gemini"\nprovider = "gemini"\napi_key_env = "GEMINI_KEY"\n'
     )
     catalog = OCRProfileCatalog.from_file(path)
     assert catalog.default_profile == "local"
@@ -78,6 +79,8 @@ def test_profile_catalog_reads_tesseract_and_openai_profiles(tmp_path) -> None:
     assert catalog.profiles["cloud"].public_payload() == {
         "id": "cloud", "label": "Cloud", "provider": "openai"
     }
+    assert catalog.profiles["gemini"].model == "gemini-3.8-flash"
+    assert catalog.profiles["gemini"].image_detail is None
 
 
 def test_settings_read_port_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

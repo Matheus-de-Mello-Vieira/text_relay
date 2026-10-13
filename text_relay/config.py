@@ -17,8 +17,9 @@ DEFAULT_MAX_RESULT_HISTORY = 20
 DEFAULT_LONG_POLL_TIMEOUT_SECONDS = 25.0
 DEFAULT_OCR_WORKERS = 2
 DEFAULT_OCR_RETRIES = 3
-OCR_PROVIDERS = {"tesseract", "openai"}
+OCR_PROVIDERS = {"gemini", "tesseract", "openai"}
 OPENAI_IMAGE_DETAILS = {"low", "high", "original", "auto"}
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 
 
 @dataclass(frozen=True)
@@ -123,16 +124,26 @@ def _profile_from_mapping(profile_id: object, raw_profile: object) -> OCRProfile
         if not isinstance(psm, int) or psm <= 0:
             raise ValueError(f"OCR profile {profile_id!r} psm must be a positive integer")
         return OCRProfile(profile_id, label, provider, language=language, psm=psm)
-    model = raw_profile.get("model", "gpt-6-luna")
-    image_detail = raw_profile.get("image_detail", "high")
+    default_model = DEFAULT_GEMINI_MODEL if provider == "gemini" else "gpt-6-luna"
+    model = raw_profile.get("model", default_model)
     api_key_env = raw_profile.get("api_key_env")
     if not isinstance(model, str) or not model:
         raise ValueError(f"OCR profile {profile_id!r} model must be a non-empty string")
-    if not isinstance(image_detail, str) or image_detail not in OPENAI_IMAGE_DETAILS:
-        raise ValueError(f"OCR profile {profile_id!r} image_detail is invalid")
     if not isinstance(api_key_env, str) or not api_key_env:
         raise ValueError(f"OCR profile {profile_id!r} api_key_env must be a non-empty string")
-    return OCRProfile(profile_id, label, provider, model=model, image_detail=image_detail, api_key_env=api_key_env)
+    if provider == "gemini":
+        return OCRProfile(profile_id, label, provider, model=model, api_key_env=api_key_env)
+    image_detail = raw_profile.get("image_detail", "high")
+    if not isinstance(image_detail, str) or image_detail not in OPENAI_IMAGE_DETAILS:
+        raise ValueError(f"OCR profile {profile_id!r} image_detail is invalid")
+    return OCRProfile(
+        profile_id,
+        label,
+        provider,
+        model=model,
+        image_detail=image_detail,
+        api_key_env=api_key_env,
+    )
 
 
 def _setting(name: str, dotenv_values: dict[str, str], default: str) -> str:

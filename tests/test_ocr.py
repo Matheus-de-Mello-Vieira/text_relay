@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from openai import APIError
+from google.genai import errors as gemini_errors
 
 from text_relay.config import OCRProfile
+from text_relay.gemini_ocr import GeminiOCRStrategy
 from text_relay.ocr import OCRConfigurationError, OCRExecutionError, create_ocr_strategy
 from text_relay.openai_ocr import OpenAIOCRStrategy, TRANSCRIPTION_PROMPT
 from text_relay.tesseract_ocr import TesseractOCRStrategy, TesseractUnavailable, _extract_text
@@ -62,6 +64,11 @@ def test_strategy_selection_is_explicit() -> None:
             )
         )
     assert isinstance(strategy, OpenAIOCRStrategy)
+    with patch("text_relay.ocr.environment_value", return_value="test-key"):
+        strategy = create_ocr_strategy(
+            OCRProfile("gemini", "Gemini", "gemini", model="model", api_key_env="TEST_KEY")
+        )
+    assert isinstance(strategy, GeminiOCRStrategy)
 
 
 def test_invalid_strategy_selection_is_controlled() -> None:
@@ -75,6 +82,15 @@ def test_openai_selection_requires_a_server_side_key() -> None:
     )
     with patch("text_relay.ocr.environment_value", return_value=None):
         with pytest.raises(OCRConfigurationError, match="OPENAI_API_KEY"):
+            create_ocr_strategy(profile)
+
+
+def test_gemini_selection_requires_a_server_side_key() -> None:
+    profile = OCRProfile(
+        "gemini", "Gemini", "gemini", model="model", api_key_env="GEMINI_API_KEY"
+    )
+    with patch("text_relay.ocr.environment_value", return_value=None):
+        with pytest.raises(OCRConfigurationError, match="GEMINI_API_KEY"):
             create_ocr_strategy(profile)
 
 
@@ -111,4 +127,39 @@ def test_openai_maps_sdk_failures_to_controlled_errors() -> None:
     )
     strategy = OpenAIOCRStrategy(api_key="test-key", model="model", image_detail="high", client=client)
     with pytest.raises(OCRExecutionError, match="OpenAI could not process"):
+        asyncio.run(strategy.extract_text(b"image", "image/jpeg"))
+
+
+def test_gemini_sends_an_inline_image_and_returns_transcription() -> None:
+    client = Mock()
+    client.models.generate_content = AsyncMock(return_value=Mock(text="Expected transcription"))
+    strategy = GeminiOCRStrategy(api_key="test-key", model="gemini-3.8-flash", client=client)
+
+    assert asyncio.run(strategy.extract_text(b"image-bytes", "image/png")) == "Expected transcription"
+
+    request = client.models.generate_content.await_args.kwargs
+    assert request["model"] == "gemini-3.8-flash"
+    assert request["contents"][0] == TRANSCRIPTION_PROMPT
+    image = request["contents"][1]
+    assert image.inline_data.mime_type == "image/png"
+    assert image.inline_data.data == b"image-bytes"
+
+
+def test_gemini_rejects_empty_response() -> None:
+    client = Mock()
+    client.models.generate_content = AsyncMock(return_value=Mock(text=" "))
+    strategy = GeminiOCRStrategy(api_key="test-key", model="model", client=client)
+
+    with pytest.raises(OCRExecutionError, match="no transcription"):
+        asyncio.run(strategy.extract_text(b"image", "image/jpeg"))
+
+
+def test_gemini_maps_sdk_failures_to_controlled_errors() -> None:
+    client = Mock()
+    client.models.generate_content = AsyncMock(
+        side_effect=gemini_errors.APIError(500, {"error": {"message": "provider failure"}})
+    )
+    strategy = GeminiOCRStrategy(api_key="test-key", model="model", client=client)
+
+    with pytest.raises(OCRExecutionError, match="Gemini could not process"):
         asyncio.run(strategy.extract_text(b"image", "image/jpeg"))

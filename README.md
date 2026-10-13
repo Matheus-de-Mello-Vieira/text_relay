@@ -15,6 +15,7 @@ public internet. It has no authentication or transport-security layer.
 - [Poetry](https://python-poetry.org/)
 - Tesseract with the English language data (only for local OCR mode)
 - An OpenAI API key (only for OpenAI OCR mode)
+- A Gemini API key (only for Gemini OCR mode)
 
 On macOS, install Tesseract with Homebrew:
 
@@ -106,6 +107,12 @@ provider = "openai"
 model = "gpt-6-luna"
 image_detail = "high"
 api_key_env = "OPENAI_API_KEY"
+
+[profiles.gemini]
+label = "Gemini Vision"
+provider = "gemini"
+model = "gemini-3.8-flash"
+api_key_env = "GEMINI_API_KEY"
 ```
 
 Select a profile in the web interface to change the server-wide setting for
@@ -113,10 +120,11 @@ future uploads. The choice is not persisted: a restart returns to
 `default_profile`. Queued jobs and retries retain the profile selected when
 they were submitted. The same image may be submitted once for each profile.
 
-For an OpenAI profile, set the named key in the process environment or `.env`:
+For OpenAI and Gemini profiles, set the named key in the process environment or `.env`:
 
 ```dotenv
 OPENAI_API_KEY=...
+GEMINI_API_KEY=...
 ```
 
 The key remains on the server and is never returned to the browser. Do not put
@@ -154,6 +162,6 @@ shown both in the submitting browser and in another already-open browser.
 
 TextRelay limits uploads, accepts only supported image content types, invokes
 Tesseract without a shell, and deletes temporary image files after local
-processing. OpenAI mode transmits each uploaded image to the OpenAI API.
+processing. OpenAI and Gemini modes transmit each uploaded image to their respective APIs.
 Those measures do not make it safe as an internet-facing service. Do not port
 forward it or expose it directly to the public internet.

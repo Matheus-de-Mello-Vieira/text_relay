@@ -48,6 +48,17 @@ def create_ocr_strategy(profile: OCRProfile) -> OCRStrategy:
             model=profile.model,
             image_detail=profile.image_detail,
         )
+    if profile.provider == "gemini":
+        assert profile.api_key_env is not None
+        api_key = environment_value(profile.api_key_env)
+        if not api_key:
+            raise OCRConfigurationError(
+                f"{profile.api_key_env} is required for OCR profile {profile.id!r}"
+            )
+        from text_relay.gemini_ocr import GeminiOCRStrategy
+
+        assert profile.model is not None
+        return GeminiOCRStrategy(api_key=api_key, model=profile.model)
     raise OCRConfigurationError(f"Unsupported OCR provider: {profile.provider}")
 
 

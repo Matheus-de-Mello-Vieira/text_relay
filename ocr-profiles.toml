@@ -12,3 +12,9 @@ provider = "openai"
 model = "gpt-6-luna"
 image_detail = "high"
 api_key_env = "OPENAI_API_KEY"
+
+[profiles.gemini]
+label = "Gemini Vision"
+provider = "gemini"
+model = "gemini-3.8-flash"
+api_key_env = "GEMINI_API_KEY"
