@@ -219,3 +219,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 *.local.*
+
+.playwright-cli
+.codex/config.toml
