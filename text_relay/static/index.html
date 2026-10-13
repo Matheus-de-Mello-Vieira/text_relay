@@ -8,17 +8,31 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main>
-    <div class="brand"><img class="brand-mark" src="/textrelay-icon.png" alt="" width="32" height="32">TEXTRELAY</div>
-    <h1>Turn a photo into text.</h1>
-    <p class="intro">Take a picture of printed text or choose an existing image. Your transcription appears here in moments, ready to copy.</p>
-    <form id="upload-form" class="upload-panel">
-      <div class="panel-heading"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 16 3-3 2.5 2.5L15 12l3 4M8 5l1.2-2h5.6L16 5"/></svg></span><div><h2>Choose an image</h2><p>JPG, PNG, or WebP up to 10 MB</p></div></div>
-      <div class="profile-control"><label for="ocr-profile">OCR profile</label><select id="ocr-profile" disabled></select><p>This setting applies to everyone using this server.</p></div>
-      <label id="file-picker" class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required><span class="file-picker-content"><strong>Drop an image here or browse files</strong><span>JPG, PNG, or WebP · stays on this trusted network</span></span></label>
-      <div id="file-name" class="file-name" aria-live="polite"><span></span><button id="clear-file" class="clear-file" type="button">Remove</button></div>
-      <button id="submit" type="submit" disabled>Choose an image to extract text</button>
-    </form>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="TextRelay home"><span class="brand-icon"><img class="brand-mark" src="/textrelay-icon.png" alt="" width="32" height="32"></span><span>TextRelay</span></a>
+      <span class="network-badge"><span aria-hidden="true"></span>Local network</span>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h5M4 4v5M20 4h-5M20 4v5M4 20h5M4 20v-5M20 20h-5M20 20v-5"/><path d="M8 12h8"/></svg> Image to text</div>
+        <h1 id="page-title">Extract text from any image.</h1>
+        <p class="intro">Upload a photo, crop to the important part, and get clean text back in moments.</p>
+      </section>
+      <div class="workspace">
+        <form id="upload-form" class="upload-panel card">
+          <div class="card-header"><div class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 16 3-3 2.5 2.5L15 12l3 4M8 5l1.2-2h5.6L16 5"/></svg></div><div><h2>New extraction</h2><p>Choose an image to add to the queue.</p></div></div>
+          <div class="profile-control"><label for="ocr-profile">OCR profile</label><select id="ocr-profile" disabled></select><p>This setting applies to everyone using this server.</p></div>
+          <label id="file-picker" class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span><span class="file-picker-content"><strong>Drop an image here or browse</strong><span>JPG, PNG, or WebP · Maximum 10 MB</span></span></label>
+          <div id="file-name" class="file-name" aria-live="polite"><span></span><button id="clear-file" class="clear-file" type="button">Remove</button></div>
+          <button id="submit" type="submit" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 20h14"/></svg><span id="submit-label">Choose an image to extract text</span></button>
+        </form>
+        <aside class="info-card card" aria-label="How it works">
+          <div class="info-card-heading"><span class="info-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span><h2>How your images are handled</h2></div>
+          <p>Your image goes to this server for processing. Cloud OCR profiles also send it to the selected provider. Results are shared with other open TextRelay pages on your network.</p>
+          <div class="how-it-works"><span><b>1</b>Upload</span><span><b>2</b>Crop</span><span><b>3</b>Copy</span></div>
+        </aside>
+      </div>
     <div id="crop-dialog" class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-title" hidden>
       <div class="crop-dialog-backdrop"></div>
       <section class="crop-dialog-content">
@@ -27,22 +41,25 @@
         <div class="crop-actions"><button id="cancel-crop" class="secondary-button" type="button">Cancel</button><button id="confirm-crop" type="button">Confirm crop</button></div>
       </section>
     </div>
-    <p id="status" role="status" aria-live="polite"></p>
-    <section id="submitted" hidden><h2>Latest submission</h2></section>
-    <section aria-labelledby="queue-heading">
+      <p id="status" role="status" aria-live="polite"></p>
+      <section id="submitted" hidden><h2>Latest submission</h2></section>
+      <section aria-labelledby="queue-heading">
       <div class="section-heading"><h2 id="queue-heading">Extraction queue</h2><span>Shared across this network</span></div>
       <div id="queue"><div class="empty-state">No images have been submitted yet.</div></div>
     </section>
-    <section aria-labelledby="results-heading">
+      <section aria-labelledby="results-heading">
       <div class="section-heading"><h2 id="results-heading">Recent results</h2><span>Synced across this network</span></div>
       <div id="results"><div class="empty-state">Your extracted text will appear here.</div></div>
-    </section>
-  </main>
+      </section>
+    </main>
+    <footer>TextRelay runs on your local network.</footer>
+  </div>
   <script src="/assets/cropper.js"></script>
   <script>
     const form = document.querySelector("#upload-form");
     const imageInput = document.querySelector("#image");
     const submitButton = document.querySelector("#submit");
+    const submitLabel = document.querySelector("#submit-label");
     const status = document.querySelector("#status");
     const results = document.querySelector("#results");
     const queue = document.querySelector("#queue");
@@ -62,6 +79,7 @@
     let cropper = null;
     let cropObjectUrl = null;
     let cropSourceFile = null;
+    let focusBeforeCrop = null;
     const profileLabels = new Map();
 
     function setStatus(message, state = "") {
@@ -83,7 +101,7 @@
       fileName.classList.toggle("visible", hasFile);
       filePicker.classList.toggle("selected", hasFile);
       submitButton.disabled = !hasFile;
-      submitButton.textContent = hasFile ? "Extract text" : "Choose an image to extract text";
+      submitLabel.textContent = hasFile ? "Extract text" : "Choose an image to extract text";
     }
     function setInputFile(file) {
       const files = new DataTransfer();
@@ -95,6 +113,9 @@
       cropper = null;
       cropperContainer.replaceChildren();
       cropDialog.hidden = true;
+      document.body.classList.remove("crop-open");
+      if (focusBeforeCrop?.isConnected) focusBeforeCrop.focus();
+      focusBeforeCrop = null;
       if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
       cropObjectUrl = null;
       cropSourceFile = null;
@@ -120,19 +141,24 @@
         return;
       }
       closeCropDialog();
+      focusBeforeCrop = document.activeElement;
       cropSourceFile = file;
       cropObjectUrl = URL.createObjectURL(file);
       const image = new Image();
       image.alt = "Selected image, ready to crop";
       image.addEventListener("load", () => {
+        if (cropDialog.hidden || cropSourceFile !== file) return;
         cropper = new Cropper(image, { container: cropperContainer });
         confirmCropButton.focus();
       }, { once: true });
       image.addEventListener("error", () => {
+        if (cropDialog.hidden || cropSourceFile !== file) return;
         closeCropDialog({ discard: true });
         setStatus("Could not read that image. Choose a different image.", "error");
       }, { once: true });
       cropDialog.hidden = false;
+      document.body.classList.add("crop-open");
+      cancelCropButton.focus();
       image.src = cropObjectUrl;
     }
     async function confirmCrop() {
@@ -278,6 +304,25 @@
       imageInput.focus();
     });
     cancelCropButton.addEventListener("click", () => closeCropDialog({ discard: true }));
+    cropDialog.querySelector(".crop-dialog-backdrop").addEventListener("click", () => closeCropDialog({ discard: true }));
+    cropDialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCropDialog({ discard: true });
+      } else if (event.key === "Tab") {
+        const focusable = Array.from(cropDialog.querySelectorAll("button:not(:disabled), [tabindex]:not([tabindex='-1'])"))
+          .filter((element) => element.getClientRects().length);
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
     confirmCropButton.addEventListener("click", confirmCrop);
     ["dragenter", "dragover"].forEach((eventName) => filePicker.addEventListener(eventName, (event) => {
       event.preventDefault();
