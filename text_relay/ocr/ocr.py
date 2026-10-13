@@ -29,7 +29,7 @@ class OCRStrategy(Protocol):
 def create_ocr_strategy(profile: OCRProfile) -> OCRStrategy:
     """Create the strategy described by one validated OCR profile."""
     if profile.provider == "tesseract":
-        from text_relay.tesseract_ocr import TesseractOCRStrategy
+        from .tesseract_ocr import TesseractOCRStrategy
 
         assert profile.language is not None and profile.psm is not None
         return TesseractOCRStrategy(language=profile.language, psm=profile.psm)
@@ -40,7 +40,7 @@ def create_ocr_strategy(profile: OCRProfile) -> OCRStrategy:
             raise OCRConfigurationError(
                 f"{profile.api_key_env} is required for OCR profile {profile.id!r}"
             )
-        from text_relay.openai_ocr import OpenAIOCRStrategy
+        from .openai_ocr import OpenAIOCRStrategy
 
         assert profile.model is not None and profile.image_detail is not None
         return OpenAIOCRStrategy(
@@ -55,7 +55,7 @@ def create_ocr_strategy(profile: OCRProfile) -> OCRStrategy:
             raise OCRConfigurationError(
                 f"{profile.api_key_env} is required for OCR profile {profile.id!r}"
             )
-        from text_relay.gemini_ocr import GeminiOCRStrategy
+        from .gemini_ocr import GeminiOCRStrategy
 
         assert profile.model is not None
         return GeminiOCRStrategy(api_key=api_key, model=profile.model)

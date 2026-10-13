@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from text_relay.ocr import OCRExecutionError
+from .ocr import OCRExecutionError
 
 LOGGER = logging.getLogger(__name__)
 

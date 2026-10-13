@@ -712,9 +712,12 @@ lan-ocr/
 ├── lan_ocr/
 │   ├── __init__.py
 │   ├── main.py
-│   ├── ocr.py              # OCRStrategy and provider selection
-│   ├── tesseract_ocr.py
-│   ├── openai_ocr.py
+│   ├── ocr/
+│   │   ├── __init__.py     # public OCR API
+│   │   ├── ocr.py          # OCRStrategy and provider selection
+│   │   ├── tesseract_ocr.py
+│   │   ├── openai_ocr.py
+│   │   └── gemini_ocr.py
 │   ├── store.py
 │   └── static/
 │       └── index.html
@@ -735,14 +738,17 @@ Responsibilities:
 main.py
     HTTP application and routes
 
-ocr.py
+ocr/ocr.py
     OCRStrategy boundary and explicit provider selection
 
-tesseract_ocr.py
+ocr/tesseract_ocr.py
     local Tesseract strategy
 
-openai_ocr.py
+ocr/openai_ocr.py
     remote OpenAI Responses API strategy
+
+ocr/gemini_ocr.py
+    remote Google Gemini API strategy
 
 store.py
     bounded in-memory result history

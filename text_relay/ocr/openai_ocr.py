@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from openai import APIError, AsyncOpenAI
 
-from text_relay.ocr import OCRExecutionError
+from .ocr import OCRExecutionError
 
 LOGGER = logging.getLogger(__name__)
 

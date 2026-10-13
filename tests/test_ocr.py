@@ -7,15 +7,15 @@ from openai import APIError
 from google.genai import errors as gemini_errors
 
 from text_relay.config import OCRProfile
-from text_relay.gemini_ocr import GeminiOCRStrategy
+from text_relay.ocr.gemini_ocr import GeminiOCRStrategy
 from text_relay.ocr import OCRConfigurationError, OCRExecutionError, create_ocr_strategy
-from text_relay.openai_ocr import OpenAIOCRStrategy, TRANSCRIPTION_PROMPT
-from text_relay.tesseract_ocr import TesseractOCRStrategy, TesseractUnavailable, _extract_text
+from text_relay.ocr.openai_ocr import OpenAIOCRStrategy, TRANSCRIPTION_PROMPT
+from text_relay.ocr.tesseract_ocr import TesseractOCRStrategy, TesseractUnavailable, _extract_text
 
 
 def test_tesseract_uses_required_command() -> None:
     completed = Mock(returncode=0, stdout="Recognized text", stderr="")
-    with patch("text_relay.tesseract_ocr.subprocess.run", return_value=completed) as run:
+    with patch("text_relay.ocr.tesseract_ocr.subprocess.run", return_value=completed) as run:
         result = _extract_text(Path("/tmp/image.png"), language="eng", psm=6)
     assert result == "Recognized text"
     run.assert_called_once_with(
@@ -27,13 +27,13 @@ def test_tesseract_uses_required_command() -> None:
 
 
 def test_tesseract_maps_nonzero_exit_to_controlled_error() -> None:
-    with patch("text_relay.tesseract_ocr.subprocess.run", return_value=Mock(returncode=1)):
+    with patch("text_relay.ocr.tesseract_ocr.subprocess.run", return_value=Mock(returncode=1)):
         with pytest.raises(OCRExecutionError, match="Tesseract failed"):
             _extract_text(Path("image.png"), language="eng", psm=6)
 
 
 def test_tesseract_maps_missing_executable_to_controlled_error() -> None:
-    with patch("text_relay.tesseract_ocr.subprocess.run", side_effect=FileNotFoundError):
+    with patch("text_relay.ocr.tesseract_ocr.subprocess.run", side_effect=FileNotFoundError):
         with pytest.raises(TesseractUnavailable, match="not installed"):
             _extract_text(Path("image.png"), language="eng", psm=6)
 
@@ -47,7 +47,7 @@ def test_tesseract_removes_temporary_file() -> None:
         assert path.read_bytes() == b"image"
         return "text"
 
-    with patch("text_relay.tesseract_ocr._extract_text", side_effect=extract):
+    with patch("text_relay.ocr.tesseract_ocr._extract_text", side_effect=extract):
         assert asyncio.run(strategy.extract_text(b"image", "image/png")) == "text"
     assert paths and not paths[0].exists()
 
@@ -57,14 +57,14 @@ def test_strategy_selection_is_explicit() -> None:
         create_ocr_strategy(OCRProfile("local", "Local", "tesseract", language="eng", psm=6)),
         TesseractOCRStrategy,
     )
-    with patch("text_relay.ocr.environment_value", return_value="test-key"):
+    with patch("text_relay.ocr.ocr.environment_value", return_value="test-key"):
         strategy = create_ocr_strategy(
             OCRProfile(
                 "cloud", "Cloud", "openai", model="model", image_detail="high", api_key_env="TEST_KEY"
             )
         )
     assert isinstance(strategy, OpenAIOCRStrategy)
-    with patch("text_relay.ocr.environment_value", return_value="test-key"):
+    with patch("text_relay.ocr.ocr.environment_value", return_value="test-key"):
         strategy = create_ocr_strategy(
             OCRProfile("gemini", "Gemini", "gemini", model="model", api_key_env="TEST_KEY")
         )
@@ -80,7 +80,7 @@ def test_openai_selection_requires_a_server_side_key() -> None:
     profile = OCRProfile(
         "cloud", "Cloud", "openai", model="model", image_detail="high", api_key_env="OPENAI_API_KEY"
     )
-    with patch("text_relay.ocr.environment_value", return_value=None):
+    with patch("text_relay.ocr.ocr.environment_value", return_value=None):
         with pytest.raises(OCRConfigurationError, match="OPENAI_API_KEY"):
             create_ocr_strategy(profile)
 
@@ -89,7 +89,7 @@ def test_gemini_selection_requires_a_server_side_key() -> None:
     profile = OCRProfile(
         "gemini", "Gemini", "gemini", model="model", api_key_env="GEMINI_API_KEY"
     )
-    with patch("text_relay.ocr.environment_value", return_value=None):
+    with patch("text_relay.ocr.ocr.environment_value", return_value=None):
         with pytest.raises(OCRConfigurationError, match="GEMINI_API_KEY"):
             create_ocr_strategy(profile)
 

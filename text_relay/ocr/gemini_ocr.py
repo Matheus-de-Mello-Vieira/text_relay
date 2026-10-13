@@ -8,8 +8,8 @@ from typing import Any, Protocol
 from google import genai
 from google.genai import errors, types
 
-from text_relay.ocr import OCRExecutionError
-from text_relay.openai_ocr import TRANSCRIPTION_PROMPT
+from .ocr import OCRExecutionError
+from .openai_ocr import TRANSCRIPTION_PROMPT
 
 LOGGER = logging.getLogger(__name__)
 
