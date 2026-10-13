@@ -10,6 +10,7 @@ import uvicorn
 
 from text_relay.config import Settings
 from text_relay import main
+from text_relay import assets as asset_module
 from text_relay.main import LongPollShutdownServer, create_app
 from text_relay.ocr import OCRExecutionError
 
@@ -163,7 +164,7 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
         requests.append(request)
         return DownloadedAsset(f"asset from {request.full_url}".encode())
 
-    monkeypatch.setattr(main, "urlopen", download)
+    monkeypatch.setattr(asset_module, "urlopen", download)
     cache = main.AssetCache(tmp_path)
     client = make_client(FakeOCRStrategy(), assets=cache)
 
@@ -174,15 +175,15 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
     assert first_script.headers["content-type"].startswith("text/javascript")
     assert second_script.content == first_script.content
     assert [request.full_url for request in requests] == [
-        main.ASSETS["cropper.js"][0]
+        asset_module.ASSETS["cropper.js"][0]
     ]
     assert (tmp_path / "cropper.js.etag").read_text() == '"cropper-version"'
 
     def unchanged(request, timeout):
         requests.append(request)
-        raise main.HTTPError(request.full_url, 304, "Not Modified", {}, None)
+        raise asset_module.HTTPError(request.full_url, 304, "Not Modified", {}, None)
 
-    monkeypatch.setattr(main, "urlopen", unchanged)
+    monkeypatch.setattr(asset_module, "urlopen", unchanged)
     make_client(FakeOCRStrategy(), assets=cache)
 
     assert requests[-1].get_header("If-none-match") == '"cropper-version"'
@@ -190,9 +191,9 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
 
 def test_missing_cropper_asset_returns_not_found_after_a_failed_startup_refresh(monkeypatch, tmp_path) -> None:
     def unavailable(*_args, **_kwargs):
-        raise main.URLError("offline")
+        raise asset_module.URLError("offline")
 
-    monkeypatch.setattr(main, "urlopen", unavailable)
+    monkeypatch.setattr(asset_module, "urlopen", unavailable)
     client = make_client(FakeOCRStrategy(), assets=main.AssetCache(tmp_path))
 
     response = client.get("/assets/cropper.js")
