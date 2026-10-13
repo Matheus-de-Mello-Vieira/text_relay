@@ -9,6 +9,24 @@ computer browsers without reloading.
 It is designed for a trusted LAN and must not be exposed directly to the
 public internet. It has no authentication or transport-security layer.
 
+## Privacy by design
+
+Uploaded images, OCR results, and job history are kept in the server process
+memory. TextRelay does not save them to a database, and they are cleared when
+the server restarts. `MAX_RESULT_HISTORY` limits the retained history. Local
+Tesseract OCR briefly writes an image to a temporary file and deletes it after
+processing. The `.cache` directory stores the Cropper.js browser asset, not
+uploads or OCR results.
+
+Set `HOST_CIDR` to bind the server to a local IP in the network you intend to
+use, instead of the default `0.0.0.0` binding on all interfaces. For example,
+`HOST_CIDR=192.168.0.0/24` selects a matching local address on that network.
+This narrows where the server listens; it does not authenticate clients or
+restrict requests by their source IP. Use TextRelay only on a trusted network.
+
+The local Tesseract profile processes images on your computer. OpenAI and
+Gemini profiles send uploaded images to their respective APIs for OCR.
+
 ## Requirements
 
 - Python 3.13+
