@@ -27,7 +27,7 @@ class FakeOCRStrategy:
         return self.text
 
 
-class UnavailableCropperAssets:
+class UnavailableAssets:
     """Keep unrelated API tests independent from the external Cropper CDN."""
 
     directory = Path.cwd() / ".cache"
@@ -55,7 +55,7 @@ def make_client(
     maximum_size: int = 1024,
     history_size: int = 2,
     workers: int = 2,
-    cropper_assets=None,
+    assets=None,
 ) -> TestClient:
     client = TestClient(
         create_app(
@@ -65,7 +65,7 @@ def make_client(
                 ocr_workers=workers,
             ),
             ocr_strategy=strategy,
-            cropper_assets=cropper_assets or UnavailableCropperAssets(),
+            assets=assets or UnavailableAssets(),
         )
     )
     client.__enter__()
@@ -164,8 +164,8 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
         return DownloadedAsset(f"asset from {request.full_url}".encode())
 
     monkeypatch.setattr(main, "urlopen", download)
-    cache = main.CropperAssetCache(tmp_path)
-    client = make_client(FakeOCRStrategy(), cropper_assets=cache)
+    cache = main.AssetCache(tmp_path)
+    client = make_client(FakeOCRStrategy(), assets=cache)
 
     first_script = client.get("/assets/cropper.js")
     second_script = client.get("/assets/cropper.js")
@@ -174,7 +174,7 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
     assert first_script.headers["content-type"].startswith("text/javascript")
     assert second_script.content == first_script.content
     assert [request.full_url for request in requests] == [
-        main.CROPPER_ASSETS["cropper.js"][0]
+        main.ASSETS["cropper.js"][0]
     ]
     assert (tmp_path / "cropper.js.etag").read_text() == '"cropper-version"'
 
@@ -183,7 +183,7 @@ def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_pat
         raise main.HTTPError(request.full_url, 304, "Not Modified", {}, None)
 
     monkeypatch.setattr(main, "urlopen", unchanged)
-    make_client(FakeOCRStrategy(), cropper_assets=cache)
+    make_client(FakeOCRStrategy(), assets=cache)
 
     assert requests[-1].get_header("If-none-match") == '"cropper-version"'
 
@@ -193,7 +193,7 @@ def test_missing_cropper_asset_returns_not_found_after_a_failed_startup_refresh(
         raise main.URLError("offline")
 
     monkeypatch.setattr(main, "urlopen", unavailable)
-    client = make_client(FakeOCRStrategy(), cropper_assets=main.CropperAssetCache(tmp_path))
+    client = make_client(FakeOCRStrategy(), assets=main.AssetCache(tmp_path))
 
     response = client.get("/assets/cropper.js")
 

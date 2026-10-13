@@ -23,7 +23,7 @@ from text_relay.queue import OCRWorkItem, OCRWorkQueue
 from text_relay.store import OCRJob, OCRResult, ResultStore
 
 ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
-CROPPER_ASSETS = {
+ASSETS = {
     "cropper.js": (
         "https://cdn.jsdelivr.net/npm/cropperjs@2.2.0/dist/cropper.js",
         "application/javascript",
@@ -32,8 +32,8 @@ CROPPER_ASSETS = {
 logger = logging.getLogger(__name__)
 
 
-class CropperAssetCache:
-    """Fetch pinned Cropper.js assets once, then serve the local cached copies."""
+class AssetCache:
+    """Fetch pinned assets once, then serve the local cached copies."""
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory
@@ -47,7 +47,7 @@ class CropperAssetCache:
     def refresh(self) -> None:
         """Refresh every asset, keeping cached files when the CDN is unavailable."""
         failure: RuntimeError | None = None
-        for name in CROPPER_ASSETS:
+        for name in ASSETS:
             try:
                 self._refresh(name)
             except RuntimeError as error:
@@ -56,7 +56,7 @@ class CropperAssetCache:
             raise failure
 
     def _refresh(self, name: str) -> None:
-        url, _ = CROPPER_ASSETS[name]
+        url, _ = ASSETS[name]
         path = self._directory / name
         etag_path = path.with_suffix(f"{path.suffix}.etag")
         with self._lock:
@@ -72,11 +72,11 @@ class CropperAssetCache:
             except HTTPError as error:
                 if error.code == 304 and path.is_file():
                     return
-                raise RuntimeError("Could not retrieve the Cropper.js asset.") from error
+                raise RuntimeError("Could not retrieve an asset.") from error
             except URLError as error:
                 if path.is_file():
                     return
-                raise RuntimeError("Could not retrieve the Cropper.js asset.") from error
+                raise RuntimeError("Could not retrieve an asset.") from error
             self._directory.mkdir(parents=True, exist_ok=True)
             self._write(path, asset)
             if etag:
@@ -133,7 +133,7 @@ def create_app(
     settings: Settings | None = None,
     *,
     ocr_strategy: OCRStrategy | None = None,
-    cropper_assets: CropperAssetCache | None = None,
+    assets: AssetCache | None = None,
 ) -> FastAPI:
     """Create an application using the configured OCR profile catalog."""
     resolved_settings = settings or Settings.from_environment()
@@ -145,9 +145,9 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         try:
-            await asyncio.to_thread(app.state.cropper_assets.refresh)
+            await asyncio.to_thread(app.state.assets.refresh)
         except RuntimeError:
-            logger.warning("Cropper.js assets could not be refreshed at startup.")
+            logger.warning("Assets could not be refreshed at startup.")
         await app.state.ocr_queue.start()
         try:
             yield
@@ -169,8 +169,8 @@ def create_app(
         resolved_settings.ocr_workers,
         resolved_settings.ocr_retries,
     )
-    app.state.cropper_assets = cropper_assets or CropperAssetCache(Path.cwd() / ".cache")
-    app.state.cropper_assets.directory.mkdir(parents=True, exist_ok=True)
+    app.state.assets = assets or AssetCache(Path.cwd() / ".cache")
+    app.state.assets.directory.mkdir(parents=True, exist_ok=True)
     app.state.is_shutting_down = False
 
     def strategy_for(profile_id: str) -> OCRStrategy:
@@ -274,7 +274,7 @@ def create_app(
 
     app.mount(
         "/assets",
-        StaticFiles(directory=app.state.cropper_assets.directory),
+        StaticFiles(directory=app.state.assets.directory),
         name="assets",
     )
     app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
