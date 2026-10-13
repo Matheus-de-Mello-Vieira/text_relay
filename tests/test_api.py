@@ -1,6 +1,7 @@
 import signal
 import time
 from hashlib import sha256
+from pathlib import Path
 from threading import Event, Thread
 
 from fastapi.testclient import TestClient
@@ -26,6 +27,18 @@ class FakeOCRStrategy:
         return self.text
 
 
+class UnavailableCropperAssets:
+    """Keep unrelated API tests independent from the external Cropper CDN."""
+
+    directory = Path.cwd() / ".cache"
+
+    def refresh(self) -> None:
+        pass
+
+    def get(self, name: str) -> bytes:
+        raise RuntimeError(f"{name} is unavailable")
+
+
 _active_clients: list[TestClient] = []
 
 
@@ -42,6 +55,7 @@ def make_client(
     maximum_size: int = 1024,
     history_size: int = 2,
     workers: int = 2,
+    cropper_assets=None,
 ) -> TestClient:
     client = TestClient(
         create_app(
@@ -51,6 +65,7 @@ def make_client(
                 ocr_workers=workers,
             ),
             ocr_strategy=strategy,
+            cropper_assets=cropper_assets or UnavailableCropperAssets(),
         )
     )
     client.__enter__()
@@ -91,6 +106,12 @@ def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
     assert '<img class="brand-mark" src="/textrelay-icon.png"' in response.text
     assert 'accept="image/jpeg,image/png,image/webp"' in response.text
     assert 'capture="environment"' in response.text
+    assert 'src="/assets/cropper.js"' in response.text
+    assert "window.Cropper?.default" in response.text
+    assert 'id="crop-dialog"' in response.text
+    assert 'name="file"' in response.text
+    assert 'selection.$toCanvas' in response.text
+    assert 'URL.revokeObjectURL' in response.text
     assert 'url.searchParams.set("wait", "true")' in response.text
     assert "window.setInterval" not in response.text
     assert "navigator.clipboard.writeText" in response.text
@@ -116,6 +137,67 @@ def test_stylesheet_is_served() -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/css")
     assert ".file-picker.dragging" in response.text
+    assert "height: 100dvh" in response.text
+    assert ".cropper-container { height: auto;" in response.text
+
+
+def test_cropper_assets_are_refreshed_at_startup_with_etags(monkeypatch, tmp_path) -> None:
+    requests: list[object] = []
+
+    class DownloadedAsset:
+        headers = {"ETag": '"cropper-version"'}
+
+        def __init__(self, asset: bytes) -> None:
+            self.asset = asset
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self) -> bytes:
+            return self.asset
+
+    def download(request, timeout):
+        requests.append(request)
+        return DownloadedAsset(f"asset from {request.full_url}".encode())
+
+    monkeypatch.setattr(main, "urlopen", download)
+    cache = main.CropperAssetCache(tmp_path)
+    client = make_client(FakeOCRStrategy(), cropper_assets=cache)
+
+    first_script = client.get("/assets/cropper.js")
+    second_script = client.get("/assets/cropper.js")
+
+    assert first_script.status_code == 200
+    assert first_script.headers["content-type"].startswith("text/javascript")
+    assert second_script.content == first_script.content
+    assert [request.full_url for request in requests] == [
+        main.CROPPER_ASSETS["cropper.js"][0]
+    ]
+    assert (tmp_path / "cropper.js.etag").read_text() == '"cropper-version"'
+
+    def unchanged(request, timeout):
+        requests.append(request)
+        raise main.HTTPError(request.full_url, 304, "Not Modified", {}, None)
+
+    monkeypatch.setattr(main, "urlopen", unchanged)
+    make_client(FakeOCRStrategy(), cropper_assets=cache)
+
+    assert requests[-1].get_header("If-none-match") == '"cropper-version"'
+
+
+def test_missing_cropper_asset_returns_not_found_after_a_failed_startup_refresh(monkeypatch, tmp_path) -> None:
+    def unavailable(*_args, **_kwargs):
+        raise main.URLError("offline")
+
+    monkeypatch.setattr(main, "urlopen", unavailable)
+    client = make_client(FakeOCRStrategy(), cropper_assets=main.CropperAssetCache(tmp_path))
+
+    response = client.get("/assets/cropper.js")
+
+    assert response.status_code == 404
 
 
 def test_missing_upload_is_rejected() -> None:

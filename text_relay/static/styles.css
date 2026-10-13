@@ -63,6 +63,19 @@ time { color: #7b869c; font-size: .8rem; }
 .copy-button:hover { border-color: #9fa9c6; background: #f5f6fa; }
 .retry-button { padding: .38rem .65rem; border: 1px solid #e7b9bd; border-radius: .5rem; background: #fff; color: #a52f39; font-size: .78rem; }
 .retry-button:hover:not(:disabled) { background: #fff3f4; }
+.crop-dialog { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 1rem; }
+.crop-dialog[hidden] { display: none; }
+.crop-dialog-backdrop { position: absolute; inset: 0; background: #101528b8; }
+.crop-dialog-content { position: relative; width: min(100%, 760px); max-height: calc(100dvh - 2rem); padding: clamp(1rem, 3vw, 1.5rem); overflow: auto; border: 1px solid #e2e6f0; border-radius: 1.15rem; background: #fff; box-shadow: 0 1.2rem 4rem #10152866; }
+.crop-dialog-header { margin-bottom: 1rem; }
+.crop-dialog-header h2 { font-size: 1.15rem; }
+.crop-dialog-header p { margin: 0; color: #63708a; font-size: .9rem; }
+.cropper-container { height: min(58dvh, 480px); min-height: 16rem; overflow: hidden; border-radius: .75rem; background: #101528; }
+.cropper-container cropper-canvas { display: block; width: 100%; height: 100%; }
+.crop-actions { display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1rem; }
+.crop-actions button { min-height: 2.75rem; padding: 0 1rem; border-radius: .65rem; background: #4655bc; color: white; }
+.crop-actions .secondary-button { border: 1px solid #d8deeb; background: #fff; color: #52607a; }
+.crop-actions .secondary-button:hover:not(:disabled) { border-color: #9fa9c6; background: #f7f8fc; }
 pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
 
@@ -72,6 +85,11 @@ pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; co
   .upload-panel { padding: 1rem; }
   .result-header, .job { align-items: flex-start; flex-direction: column; gap: .55rem; }
   .job > :last-child { align-self: stretch; justify-content: space-between; }
+  .crop-dialog { display: block; padding: 0; }
+  .crop-dialog-content { display: flex; width: 100%; height: 100dvh; max-height: none; flex-direction: column; padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); overflow: hidden; border: 0; border-radius: 0; }
+  .cropper-container { height: auto; min-height: 0; flex: 1; }
+  .crop-actions { margin-top: 1rem; }
+  .crop-actions button { flex: 1; }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -92,6 +110,10 @@ pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; co
   .copy-button:hover { background: #2a3554; }
   .retry-button { border-color: #75434a; background: #29202d; color: #ffb9bf; }
   .retry-button:hover:not(:disabled) { background: #3a2632; }
+  .crop-dialog-content { border-color: #2b3450; background: #192036; }
+  .crop-dialog-header p { color: #acb5ca; }
+  .crop-actions .secondary-button { border-color: #46506a; background: #202942; color: #d7dced; }
+  .crop-actions .secondary-button:hover:not(:disabled) { background: #2a3554; }
   pre { border-top-color: #2a3450; }
   .empty-state { border-color: #3b4662; color: #a5afc4; }
 }

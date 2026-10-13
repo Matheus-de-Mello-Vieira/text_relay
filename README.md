@@ -133,6 +133,15 @@ real keys in source control.
 The OCR history is held only in memory and is cleared when the server restarts.
 Run Uvicorn with a single worker: multiple workers have separate histories.
 
+### Image cropper assets
+
+The browser loads Cropper.js from TextRelay's `/assets/cropper.js` endpoint.
+At startup, the server retrieves the pinned Cropper.js release and caches it in
+`.cache`, storing the upstream ETag beside the asset. Later startups make a
+conditional request and retain the cached copy after a `304 Not Modified`
+response or a temporary CDN outage. Phones using TextRelay do not need outbound
+internet access.
+
 Each upload is accepted immediately and enters the shared extraction queue.
 The browser shows whether each queued image is waiting, processing, completed,
 or failed; up to `OCR_WORKERS` extractions run at once. Each retained OCR job

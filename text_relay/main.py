@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from hashlib import sha256
+import logging
 from pathlib import Path
+from threading import Lock
 from types import FrameType
 from typing import Callable
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from text_relay.config import OCRProfileCatalog, Settings
@@ -19,6 +23,70 @@ from text_relay.queue import OCRWorkItem, OCRWorkQueue
 from text_relay.store import OCRJob, OCRResult, ResultStore
 
 ACCEPTED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+CROPPER_ASSETS = {
+    "cropper.js": (
+        "https://cdn.jsdelivr.net/npm/cropperjs@2.2.0/dist/cropper.js",
+        "application/javascript",
+    ),
+}
+logger = logging.getLogger(__name__)
+
+
+class CropperAssetCache:
+    """Fetch pinned Cropper.js assets once, then serve the local cached copies."""
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._lock = Lock()
+
+    @property
+    def directory(self) -> Path:
+        """Directory served by the application's assets mount."""
+        return self._directory
+
+    def refresh(self) -> None:
+        """Refresh every asset, keeping cached files when the CDN is unavailable."""
+        failure: RuntimeError | None = None
+        for name in CROPPER_ASSETS:
+            try:
+                self._refresh(name)
+            except RuntimeError as error:
+                failure = failure or error
+        if failure is not None:
+            raise failure
+
+    def _refresh(self, name: str) -> None:
+        url, _ = CROPPER_ASSETS[name]
+        path = self._directory / name
+        etag_path = path.with_suffix(f"{path.suffix}.etag")
+        with self._lock:
+            headers = {"User-Agent": "TextRelay"}
+            if etag_path.is_file():
+                etag = etag_path.read_text(encoding="utf-8").strip()
+                if etag:
+                    headers["If-None-Match"] = etag
+            try:
+                with urlopen(Request(url, headers=headers), timeout=15) as response:
+                    asset = response.read()
+                    etag = response.headers.get("ETag")
+            except HTTPError as error:
+                if error.code == 304 and path.is_file():
+                    return
+                raise RuntimeError("Could not retrieve the Cropper.js asset.") from error
+            except URLError as error:
+                if path.is_file():
+                    return
+                raise RuntimeError("Could not retrieve the Cropper.js asset.") from error
+            self._directory.mkdir(parents=True, exist_ok=True)
+            self._write(path, asset)
+            if etag:
+                self._write(etag_path, etag.encode())
+
+    @staticmethod
+    def _write(path: Path, content: bytes) -> None:
+        temporary_path = path.with_suffix(f"{path.suffix}.tmp")
+        temporary_path.write_bytes(content)
+        temporary_path.replace(path)
 
 
 class LongPollShutdownServer(uvicorn.Server):
@@ -62,7 +130,10 @@ def _job_payload(job: OCRJob) -> dict[str, str | dict[str, str] | None]:
 
 
 def create_app(
-    settings: Settings | None = None, *, ocr_strategy: OCRStrategy | None = None
+    settings: Settings | None = None,
+    *,
+    ocr_strategy: OCRStrategy | None = None,
+    cropper_assets: CropperAssetCache | None = None,
 ) -> FastAPI:
     """Create an application using the configured OCR profile catalog."""
     resolved_settings = settings or Settings.from_environment()
@@ -73,6 +144,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        try:
+            await asyncio.to_thread(app.state.cropper_assets.refresh)
+        except RuntimeError:
+            logger.warning("Cropper.js assets could not be refreshed at startup.")
         await app.state.ocr_queue.start()
         try:
             yield
@@ -94,6 +169,8 @@ def create_app(
         resolved_settings.ocr_workers,
         resolved_settings.ocr_retries,
     )
+    app.state.cropper_assets = cropper_assets or CropperAssetCache(Path.cwd() / ".cache")
+    app.state.cropper_assets.directory.mkdir(parents=True, exist_ok=True)
     app.state.is_shutting_down = False
 
     def strategy_for(profile_id: str) -> OCRStrategy:
@@ -101,18 +178,6 @@ def create_app(
             assert ocr_strategy is not None
             return ocr_strategy
         return profile_manager.strategy_for(profile_id)
-
-    @app.get("/", response_class=FileResponse)
-    async def index() -> FileResponse:
-        return FileResponse(Path(__file__).parent / "static" / "index.html")
-
-    @app.get("/textrelay-icon.png", response_class=FileResponse)
-    async def app_icon() -> FileResponse:
-        return FileResponse(Path(__file__).parent / "static" / "textrelay-icon.png")
-
-    @app.get("/styles.css", response_class=FileResponse)
-    async def styles() -> FileResponse:
-        return FileResponse(Path(__file__).parent / "static" / "styles.css")
 
     @app.get("/api/results")
     async def recent_results(
@@ -206,6 +271,13 @@ def create_app(
             OCRWorkItem(job.id, job.image, job.content_type, strategy_for(job.profile_id))
         )
         return _job_payload(job)
+
+    app.mount(
+        "/assets",
+        StaticFiles(directory=app.state.cropper_assets.directory),
+        name="assets",
+    )
+    app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
 
     return app
 
