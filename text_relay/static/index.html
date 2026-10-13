@@ -5,67 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TextRelay</title>
   <link rel="icon" type="image/png" href="/textrelay-icon.png">
-  <style>
-    :root {
-      color-scheme: light;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f8fc;
-      color: #172033;
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-width: 320px; background: radial-gradient(circle at 0 0, #e9edff 0, transparent 31rem), #f7f8fc; }
-    main { width: min(100% - 2rem, 780px); margin: 0 auto; padding: 3.5rem 0 4rem; }
-    .brand { display: flex; align-items: center; gap: .7rem; color: #4655bc; font-size: .94rem; font-weight: 750; letter-spacing: .02em; }
-    .brand-mark { display: block; width: 2rem; height: 2rem; border-radius: .68rem; box-shadow: 0 .4rem 1rem #4655bc44; }
-    h1, h2, p { margin-top: 0; }
-    h1 { max-width: 12ch; margin: 2rem 0 .7rem; font-size: clamp(2.15rem, 6vw, 3.3rem); line-height: 1.06; letter-spacing: -.055em; }
-    .intro { max-width: 52ch; margin-bottom: 2rem; color: #63708a; font-size: 1.04rem; line-height: 1.65; }
-    .upload-panel, .result, .job { border: 1px solid #e2e6f0; border-radius: 1.15rem; background: #fff; box-shadow: 0 .7rem 2.5rem #2d3b6b0a; }
-    .upload-panel { padding: clamp(1.15rem, 4vw, 2rem); }
-    .panel-heading { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; }
-    .panel-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: .75rem; background: #eef0ff; color: #4655bc; }
-    .panel-icon svg { width: 1.25rem; height: 1.25rem; }
-    h2 { margin-bottom: .2rem; font-size: 1rem; letter-spacing: -.015em; }
-    .panel-heading p { margin: 0; color: #758097; font-size: .87rem; }
-    input { font: inherit; }
-    select { width: 100%; min-height: 2.8rem; padding: 0 .75rem; border: 1px solid #bdc5df; border-radius: .65rem; background: #fbfcff; color: inherit; font: inherit; }
-    .profile-control { margin-bottom: 1rem; } .profile-control label { display: block; margin-bottom: .35rem; color: #52607a; font-size: .84rem; font-weight: 700; } .profile-control p { margin: .35rem 0 0; color: #79849a; font-size: .78rem; }
-    .file-picker { display: grid; min-height: 8.5rem; place-items: center; border: 1.5px dashed #bdc5df; border-radius: .85rem; background: #fbfcff; cursor: pointer; text-align: center; transition: border-color .18s, background .18s; }
-    .file-picker:hover, .file-picker:focus-within { border-color: #6574d2; background: #f5f6ff; }
-    .file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-    .file-picker-content { display: grid; gap: .3rem; padding: 1rem; }
-    .file-picker strong { color: #33415f; font-size: .95rem; }
-    .file-picker span { color: #79849a; font-size: .82rem; }
-    .file-name { display: none; margin-top: .8rem; color: #52607a; font-size: .84rem; overflow-wrap: anywhere; }
-    .file-name.visible { display: block; }
-    button { border: 0; font: inherit; font-weight: 700; cursor: pointer; }
-    #submit { display: inline-flex; width: 100%; min-height: 3rem; align-items: center; justify-content: center; margin-top: 1rem; border-radius: .75rem; background: #4655bc; box-shadow: 0 .45rem 1rem #4655bc33; color: white; transition: transform .16s, background .16s, box-shadow .16s; }
-    #submit:hover:not(:disabled) { background: #3948a8; box-shadow: 0 .6rem 1.2rem #4655bc40; transform: translateY(-1px); }
-    #submit:focus-visible, .copy-button:focus-visible, .retry-button:focus-visible, .file-picker:focus-within { outline: 3px solid #9ca7f5; outline-offset: 3px; }
-    button:disabled { cursor: wait; opacity: .72; }
-    #status { min-height: 1.5rem; margin: .85rem .1rem 0; color: #63708a; font-size: .9rem; }
-    #status:not(:empty)::before { content: ""; display: inline-block; width: .48rem; height: .48rem; margin-right: .45rem; border-radius: 50%; background: currentColor; vertical-align: .08em; }
-    #status.error { color: #bd3b42; } #status.success { color: #21734d; }
-    #submitted { margin-top: 2.4rem; }
-    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2.5rem 0 1rem; }
-    .section-heading h2 { font-size: 1.1rem; }
-    .section-heading span { color: #8a94a9; font-size: .8rem; }
-    #submitted > h2 { margin-bottom: 1rem; font-size: 1.1rem; }
-    .result { padding: 1.1rem 1.2rem; margin-bottom: .85rem; }
-    .job { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .85rem 1.1rem; margin-bottom: .6rem; color: #52607a; font-size: .9rem; }
-    .job-status { padding: .2rem .55rem; border-radius: 999px; background: #eef0ff; color: #4655bc; font-size: .78rem; font-weight: 700; text-transform: capitalize; }
-    .job-status.completed { background: #e6f6ec; color: #21734d; } .job-status.failed { background: #feecee; color: #bd3b42; }
-    .result-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-    time { color: #7b869c; font-size: .8rem; }
-    .copy-button { padding: .38rem .65rem; border: 1px solid #dce1ec; border-radius: .5rem; background: #fff; color: #43516d; font-size: .78rem; transition: background .16s, border-color .16s; }
-    .copy-button:hover { border-color: #9fa9c6; background: #f5f6fa; }
-    .retry-button { padding: .38rem .65rem; border: 1px solid #e7b9bd; border-radius: .5rem; background: #fff; color: #a52f39; font-size: .78rem; }
-    .retry-button:hover:not(:disabled) { background: #fff3f4; }
-    pre { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid #edf0f5; color: #27344c; font: .9rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
-    .empty-state { padding: 2.2rem 1rem; border: 1px dashed #d8deeb; border-radius: 1rem; color: #7c879c; text-align: center; font-size: .9rem; }
-    @media (max-width: 480px) { main { width: min(100% - 1.4rem, 780px); padding-top: 1.5rem; } h1 { margin-top: 1.5rem; } .upload-panel { padding: 1rem; } .result-header { align-items: flex-start; flex-direction: column; gap: .55rem; } }
-    @media (prefers-color-scheme: dark) { :root { color-scheme: dark; background: #101528; color: #edf0fa; } body { background: radial-gradient(circle at 0 0, #252a58 0, transparent 31rem), #101528; } .upload-panel, .result, .job { border-color: #2b3450; background: #192036; box-shadow: none; } .intro, .panel-heading p, #status { color: #acb5ca; } .panel-icon { background: #293366; color: #c8ceff; } .file-picker, select { border-color: #465276; background: #151c30; } .file-picker:hover, .file-picker:focus-within { border-color: #8491f1; background: #1d2542; } .file-picker strong, pre { color: #e3e7f3; } .file-picker span, .file-name, time, .section-heading span, .profile-control label, .profile-control p { color: #a5afc4; } .copy-button { border-color: #46506a; background: #202942; color: #d7dced; } .copy-button:hover { background: #2a3554; } .retry-button { border-color: #75434a; background: #29202d; color: #ffb9bf; } .retry-button:hover:not(:disabled) { background: #3a2632; } pre { border-top-color: #2a3450; } .empty-state { border-color: #3b4662; color: #a5afc4; } }
-  </style>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main>
@@ -75,9 +15,9 @@
     <form id="upload-form" class="upload-panel">
       <div class="panel-heading"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 16 3-3 2.5 2.5L15 12l3 4M8 5l1.2-2h5.6L16 5"/></svg></span><div><h2>Choose an image</h2><p>JPG, PNG, or WebP up to 10 MB</p></div></div>
       <div class="profile-control"><label for="ocr-profile">OCR profile</label><select id="ocr-profile" disabled></select><p>This setting applies to everyone using this server.</p></div>
-      <label class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/*" capture="environment" required><span class="file-picker-content"><strong>Take a photo or browse files</strong><span>Your image stays on this trusted network</span></span></label>
-      <p id="file-name" class="file-name" aria-live="polite"></p>
-      <button id="submit" type="submit">Extract text</button>
+      <label id="file-picker" class="file-picker" for="image"><input id="image" name="file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required><span class="file-picker-content"><strong>Drop an image here or browse files</strong><span>JPG, PNG, or WebP · stays on this trusted network</span></span></label>
+      <div id="file-name" class="file-name" aria-live="polite"><span></span><button id="clear-file" class="clear-file" type="button">Remove</button></div>
+      <button id="submit" type="submit" disabled>Choose an image to extract text</button>
     </form>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="submitted" hidden><h2>Latest submission</h2></section>
@@ -99,6 +39,8 @@
     const queue = document.querySelector("#queue");
     const submitted = document.querySelector("#submitted");
     const fileName = document.querySelector("#file-name");
+    const filePicker = document.querySelector("#file-picker");
+    const clearFileButton = document.querySelector("#clear-file");
     const profileSelect = document.querySelector("#ocr-profile");
     const RESULTS_REQUEST_TIMEOUT_MS = 40_000;
     let lastResults = "";
@@ -109,6 +51,23 @@
     function setStatus(message, state = "") {
       status.textContent = message;
       status.className = state;
+    }
+    function formatFileSize(bytes) {
+      return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    function updateSelectedFile() {
+      const file = imageInput.files[0];
+      const hasFile = Boolean(file);
+      fileName.querySelector("span").replaceChildren();
+      if (file) {
+        const name = document.createElement("strong");
+        name.textContent = file.name;
+        fileName.querySelector("span").append(name, document.createTextNode(` · ${formatFileSize(file.size)}`));
+      }
+      fileName.classList.toggle("visible", hasFile);
+      filePicker.classList.toggle("selected", hasFile);
+      submitButton.disabled = !hasFile;
+      submitButton.textContent = hasFile ? "Extract text" : "Choose an image to extract text";
     }
     function displayTime(value) { return new Date(value).toLocaleString(); }
     function applyProfiles(payload) {
@@ -201,10 +160,32 @@
     function renderQueue(items) {
       queue.replaceChildren(...(items.length ? items.map(jobCard) : [Object.assign(document.createElement("div"), { className: "empty-state", textContent: "No images have been submitted yet." })]));
     }
-    imageInput.addEventListener("change", () => {
-      const file = imageInput.files[0];
-      fileName.textContent = file ? `Selected: ${file.name}` : "";
-      fileName.classList.toggle("visible", Boolean(file));
+    imageInput.addEventListener("change", updateSelectedFile);
+    clearFileButton.addEventListener("click", () => {
+      imageInput.value = "";
+      updateSelectedFile();
+      imageInput.focus();
+    });
+    ["dragenter", "dragover"].forEach((eventName) => filePicker.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      filePicker.classList.add("dragging");
+    }));
+    ["dragleave", "drop"].forEach((eventName) => filePicker.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      filePicker.classList.remove("dragging");
+    }));
+    filePicker.addEventListener("drop", (event) => {
+      const [file] = event.dataTransfer.files;
+      if (!file) return;
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowedTypes.includes(file.type)) {
+        setStatus("Choose a JPG, PNG, or WebP image.", "error");
+        return;
+      }
+      const files = new DataTransfer();
+      files.items.add(file);
+      imageInput.files = files.files;
+      updateSelectedFile();
     });
     profileSelect.addEventListener("change", async () => {
       const previous = activeProfile;
@@ -287,6 +268,7 @@
         setStatus(error.message || "Could not process the image.", "error");
       } finally {
         submitButton.disabled = false;
+        updateSelectedFile();
       }
     });
     loadProfiles();

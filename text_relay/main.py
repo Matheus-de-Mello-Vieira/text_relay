@@ -110,6 +110,10 @@ def create_app(
     async def app_icon() -> FileResponse:
         return FileResponse(Path(__file__).parent / "static" / "textrelay-icon.png")
 
+    @app.get("/styles.css", response_class=FileResponse)
+    async def styles() -> FileResponse:
+        return FileResponse(Path(__file__).parent / "static" / "styles.css")
+
     @app.get("/api/results")
     async def recent_results(
         after: str | None = Query(default=None),

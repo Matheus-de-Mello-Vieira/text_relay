@@ -19,7 +19,7 @@ text-relay = "text_relay.main:main"
 
 [tool.poetry]
 packages = [{ include = "text_relay" }]
-include = ["text_relay/static/*.html", "text_relay/static/*.png"]
+include = ["text_relay/static/*.css", "text_relay/static/*.html", "text_relay/static/*.png"]
 
 [dependency-groups]
 dev = [
