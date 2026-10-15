@@ -36,7 +36,7 @@
     <div id="crop-dialog" class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-title" hidden>
       <div class="crop-dialog-backdrop"></div>
       <section class="crop-dialog-content">
-        <div class="crop-dialog-header"><div><h2 id="crop-title">Crop and rotate image</h2><p>Adjust the angle, then drag the crop handles to select the text.</p></div></div>
+        <div class="crop-dialog-header"><div><h2 id="crop-title">Crop and rotate image</h2><p>Adjust the angle, then drag the crop handles to trim unwanted parts.</p></div></div>
         <div id="cropper-container" class="cropper-container" aria-label="Image crop area"></div>
         <div class="rotation-controls" role="group" aria-label="Image rotation">
           <span class="rotation-label">Straighten</span>
@@ -176,9 +176,22 @@
         cropper = new Cropper(image, { container: cropperContainer });
         const cropperImage = cropper.getCropperImage();
         cropperImage.rotatable = true;
-        rotateLeftButton.disabled = false;
-        rotateRightButton.disabled = false;
-        confirmCropButton.focus();
+        cropperImage.$ready(() => {
+          if (cropperImage !== cropper?.getCropperImage()) return;
+          cropperImage.$center("contain");
+          const imageBounds = cropperImage.getBoundingClientRect();
+          const canvasBounds = cropper.getCropperCanvas().getBoundingClientRect();
+          const inset = Math.min(10, imageBounds.width / 4, imageBounds.height / 4);
+          cropper.getCropperSelection().$change(
+            imageBounds.left - canvasBounds.left + inset,
+            imageBounds.top - canvasBounds.top + inset,
+            imageBounds.width - inset * 2,
+            imageBounds.height - inset * 2,
+          );
+          rotateLeftButton.disabled = false;
+          rotateRightButton.disabled = false;
+          confirmCropButton.focus();
+        });
       }, { once: true });
       image.addEventListener("error", () => {
         if (cropDialog.hidden || cropSourceFile !== file) return;
