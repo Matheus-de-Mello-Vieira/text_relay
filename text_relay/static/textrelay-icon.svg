@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="128" fill="#171717"/>
+  <g fill="none" stroke="#FAFAFA" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Scan corners -->
+    <path d="M186 115H115V186"/>
+    <path d="M326 115H397V186"/>
+    <path d="M115 326V397H186"/>
+    <path d="M326 397H397V352"/>
+    <!-- Extracted text -->
+    <path d="M179 229H333"/>
+    <!-- Text flowing into an arrow -->
+    <path d="M179 283H410"/>
+    <path d="M389 261L411 283L389 305"/>
+  </g>
+</svg>
