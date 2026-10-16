@@ -99,7 +99,8 @@ def wait_for_job(client: TestClient, job_id: str) -> dict:
 
 
 def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
-    response = make_client(FakeOCRStrategy()).get("/")
+    client = make_client(FakeOCRStrategy())
+    response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert '<link rel="icon" type="image/png" href="/textrelay-icon.png">' in response.text
@@ -108,20 +109,28 @@ def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
     assert 'accept="image/jpeg,image/png,image/webp"' in response.text
     assert 'capture="environment"' in response.text
     assert 'src="/assets/cropper.js"' in response.text
-    assert "window.Cropper?.default" in response.text
+    assert '<script type="module" src="/app.js"></script>' in response.text
+    assert '<script>' not in response.text
+    app_script = client.get("/app.js")
+    upload_script = client.get("/image-upload.js")
+    for script in (app_script, upload_script):
+        assert script.status_code == 200
+        assert "javascript" in script.headers["content-type"]
+    assert 'from "./image-upload.js"' in app_script.text
+    assert "window.Cropper?.default" in upload_script.text
     assert 'id="crop-dialog"' in response.text
     assert 'name="file"' in response.text
-    assert 'selection.$toCanvas' in response.text
-    assert 'URL.revokeObjectURL' in response.text
-    assert 'url.searchParams.set("wait", "true")' in response.text
-    assert "window.setInterval" not in response.text
-    assert "navigator.clipboard.writeText" in response.text
-    assert "RESULTS_REQUEST_TIMEOUT_MS" in response.text
-    assert 'payload.server_status === "stopping"' in response.text
-    assert "The server is shutting down." in response.text
-    assert "The server is not responding." in response.text
+    assert 'selection.$toCanvas' in upload_script.text
+    assert 'URL.revokeObjectURL' in upload_script.text
+    assert 'url.searchParams.set("wait", "true")' in app_script.text
+    assert "window.setInterval" not in app_script.text
+    assert "navigator.clipboard.writeText" in app_script.text
+    assert "RESULTS_REQUEST_TIMEOUT_MS" in app_script.text
+    assert 'payload.server_status === "stopping"' in app_script.text
+    assert "The server is shutting down." in app_script.text
+    assert "The server is not responding." in app_script.text
     assert "Extraction queue" in response.text
-    assert "Image queued for text extraction." in response.text
+    assert "Image queued for text extraction." in app_script.text
 
 
 def test_app_icon_is_served_as_a_png() -> None:
