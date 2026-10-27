@@ -221,4 +221,4 @@ __marimo__/
 *.local.*
 
 .playwright-cli
-.codex/config.toml
+.codex

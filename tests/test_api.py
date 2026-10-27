@@ -98,6 +98,35 @@ def wait_for_job(client: TestClient, job_id: str) -> dict:
     pytest.fail("OCR job did not finish")
 
 
+def test_swagger_documents_the_api_contract() -> None:
+    client = make_client(FakeOCRStrategy())
+
+    docs = client.get("/docs")
+    schema_response = client.get("/openapi.json")
+
+    assert docs.status_code == 200
+    assert "/openapi.json" in docs.text
+    assert schema_response.status_code == 200
+
+    paths = schema_response.json()["paths"]
+    assert set(paths) == {
+        "/api/results",
+        "/api/ocr-profiles",
+        "/api/ocr-profiles/active",
+        "/api/ocr",
+        "/api/jobs/{job_id}/retry",
+    }
+    upload = paths["/api/ocr"]["post"]
+    assert upload["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/OCRJobResponse"
+    )
+    assert {"400", "409", "413", "415"}.issubset(upload["responses"])
+    activate = paths["/api/ocr-profiles/active"]["put"]
+    body_schema = activate["requestBody"]["content"]["application/json"]["schema"]
+    assert body_schema["required"] == ["profile_id"]
+    assert body_schema["properties"]["profile_id"]["type"] == "string"
+
+
 def test_root_serves_mobile_upload_and_long_polling_interface() -> None:
     client = make_client(FakeOCRStrategy())
     response = client.get("/")

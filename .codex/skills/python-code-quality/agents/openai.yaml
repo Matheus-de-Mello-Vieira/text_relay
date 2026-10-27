@@ -1,6 +1,0 @@
-interface:
-  display_name: "Python Code Quality"
-  short_description: "Guide Python code-quality changes"
-  default_prompt: "Use $python-code-quality to guide a Python code change, refactor, review, or test update with repository-aware validation and behavior preservation."
-policy:
-  allow_implicit_invocation: true

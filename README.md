@@ -55,6 +55,10 @@ from other devices on the local network. On the computer, open:
 http://localhost:8000
 ```
 
+Interactive Swagger API documentation is available at
+`http://localhost:8000/docs`. The OpenAPI schema is at
+`http://localhost:8000/openapi.json`.
+
 Find the Mac's typical Wi-Fi LAN address:
 
 ```bash
